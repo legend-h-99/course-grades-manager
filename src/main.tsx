@@ -4,6 +4,7 @@ import {
   BarChart3,
   CheckCircle2,
   ClipboardList,
+  Copy,
   Database,
   Download,
   FileUp,
@@ -43,6 +44,7 @@ type CourseSetup = {
   kind: AssessmentKind;
   sectionNumber: string;
   savedAt: string;
+  code: string;
 };
 
 type Trainee = {
@@ -76,6 +78,18 @@ type AppState = {
   grades: Grade[];
 };
 
+type CourseTrainer = TrainerProfile & {
+  userId: string;
+  joinedAt: string;
+};
+
+type CourseRecord = {
+  code: string;
+  state: AppState;
+  trainers: CourseTrainer[];
+  updatedAt: string;
+};
+
 type AuthUser = {
   id: string;
   fullName: string;
@@ -88,6 +102,7 @@ type AppPage = "home" | "register" | "login" | "app";
 
 const LEGACY_STORAGE_KEY = "shared-course-grades-v3";
 const WORKSPACE_PREFIX = "shared-course-workspace-v1:";
+const COURSE_DIRECTORY_KEY = "shared-course-directory-v1";
 const AUTH_USERS_KEY = "shared-course-auth-users-v1";
 const AUTH_SESSION_KEY = "shared-course-auth-session-v1";
 
@@ -98,7 +113,7 @@ function today() {
 const starterState: AppState = {
   account: { collegeName: "", departmentName: "", majorName: "" },
   trainer: { name: "", employeeNumber: "" },
-  course: { name: "", kind: "theory", sectionNumber: "", savedAt: "" },
+  course: { name: "", kind: "theory", sectionNumber: "", savedAt: "", code: "" },
   trainees: [],
   assessments: [
     { id: crypto.randomUUID(), name: "اختبار نظري 1", kind: "theory", maxScore: 20, date: today() },
@@ -115,10 +130,76 @@ function readStateFromStorage(key: string): AppState {
   const raw = localStorage.getItem(key);
   if (!raw) return starterState;
   try {
-    return { ...starterState, ...(JSON.parse(raw) as AppState) };
+    const parsed = JSON.parse(raw) as AppState;
+    return {
+      ...starterState,
+      ...parsed,
+      account: { ...starterState.account, ...parsed.account },
+      trainer: { ...starterState.trainer, ...parsed.trainer },
+      course: { ...starterState.course, ...parsed.course }
+    };
   } catch {
     return starterState;
   }
+}
+
+function readCourseDirectory(): CourseRecord[] {
+  const raw = localStorage.getItem(COURSE_DIRECTORY_KEY);
+  if (!raw) return [];
+  try {
+    return JSON.parse(raw) as CourseRecord[];
+  } catch {
+    return [];
+  }
+}
+
+function saveCourseDirectory(records: CourseRecord[]) {
+  localStorage.setItem(COURSE_DIRECTORY_KEY, JSON.stringify(records));
+}
+
+function normalizeCourseCode(value: string) {
+  return value.trim().replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+}
+
+function generateCourseCode(records: CourseRecord[]) {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+  do {
+    code = Array.from({ length: 8 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
+  } while (records.some((record) => record.code === code));
+  return code;
+}
+
+function trainerEntry(userId: string, trainer: TrainerProfile): CourseTrainer {
+  return {
+    userId,
+    name: trainer.name,
+    employeeNumber: trainer.employeeNumber,
+    joinedAt: new Date().toISOString()
+  };
+}
+
+function upsertCourseRecord(userId: string, appState: AppState) {
+  if (!appState.course.code) return;
+  const records = readCourseDirectory();
+  const index = records.findIndex((record) => record.code === appState.course.code);
+  const nextTrainer = trainerEntry(userId, appState.trainer);
+
+  if (index >= 0) {
+    const record = records[index];
+    const trainers = record.trainers.some((trainer) => trainer.userId === userId)
+      ? record.trainers.map((trainer) => (trainer.userId === userId ? { ...trainer, ...nextTrainer } : trainer))
+      : [...record.trainers, nextTrainer];
+    records[index] = { ...record, state: appState, trainers, updatedAt: new Date().toISOString() };
+  } else {
+    records.push({
+      code: appState.course.code,
+      state: appState,
+      trainers: [nextTrainer],
+      updatedAt: new Date().toISOString()
+    });
+  }
+  saveCourseDirectory(records);
 }
 
 function readWorkspace(userId: string): AppState {
@@ -130,6 +211,7 @@ function readWorkspace(userId: string): AppState {
 
 function saveWorkspace(userId: string, appState: AppState) {
   localStorage.setItem(workspaceKey(userId), JSON.stringify(appState));
+  upsertCourseRecord(userId, appState);
 }
 
 function readAuthUsers(): AuthUser[] {
@@ -250,6 +332,9 @@ function App() {
   const [authMessage, setAuthMessage] = useState("");
   const [storageMessage, setStorageMessage] = useState("");
   const [lastSavedAt, setLastSavedAt] = useState("");
+  const [courseCodeQuery, setCourseCodeQuery] = useState("");
+  const [courseLookupMessage, setCourseLookupMessage] = useState("");
+  const [courseLookup, setCourseLookup] = useState<CourseRecord | null>(null);
   const [query, setQuery] = useState("");
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [manualNames, setManualNames] = useState("");
@@ -350,11 +435,19 @@ function App() {
 
   function saveSetup() {
     if (!setupReady) return;
-    setState((current) => ({
-      ...current,
-      course: { ...current.course, savedAt: new Date().toISOString() },
-      trainees: current.trainees.map((trainee) => applyCourseSection(trainee, current.course))
-    }));
+    setState((current) => {
+      const records = readCourseDirectory();
+      const courseCode = current.course.code || generateCourseCode(records);
+      const course = { ...current.course, code: courseCode, savedAt: new Date().toISOString() };
+      const nextState = {
+        ...current,
+        course,
+        trainees: current.trainees.map((trainee) => applyCourseSection(trainee, course))
+      };
+      if (currentUserId) upsertCourseRecord(currentUserId, nextState);
+      setStorageMessage(`تم إنشاء رمز المقرر: ${courseCode}`);
+      return nextState;
+    });
   }
 
   function registerUser() {
@@ -419,6 +512,39 @@ function App() {
     if (!currentUserId) return;
     setState(readWorkspace(currentUserId));
     setStorageMessage("تم استدعاء آخر نسخة محفوظة لهذا الحساب.");
+  }
+
+  function findCourseByCode() {
+    const code = normalizeCourseCode(courseCodeQuery);
+    if (!code) {
+      setCourseLookup(null);
+      setCourseLookupMessage("أدخل رمز المقرر أولًا.");
+      return;
+    }
+    const record = readCourseDirectory().find((item) => item.code === code) ?? null;
+    setCourseLookup(record);
+    setCourseLookupMessage(record ? "تم العثور على المقرر." : "لم يتم العثور على مقرر بهذا الرمز في هذا المتصفح.");
+  }
+
+  function joinCourseByCode() {
+    if (!currentUserId || !courseLookup) return;
+    const joinedState = {
+      ...courseLookup.state,
+      trainer: {
+        name: currentUser?.fullName || state.trainer.name,
+        employeeNumber: state.trainer.employeeNumber
+      }
+    };
+    setState(joinedState);
+    saveWorkspace(currentUserId, joinedState);
+    setCourseLookupMessage("تم الانضمام للمقرر واستدعاء بياناته.");
+    setStorageMessage(`تم الانضمام للمقرر برمز ${courseLookup.code}.`);
+  }
+
+  async function copyCourseCode() {
+    if (!state.course.code) return;
+    await navigator.clipboard.writeText(state.course.code);
+    setStorageMessage("تم نسخ رمز المقرر.");
   }
 
   async function importTrainees(event: ChangeEvent<HTMLInputElement>) {
@@ -519,6 +645,7 @@ function App() {
       "اسم المدرب",
       "الرقم الوظيفي",
       "اسم المقرر",
+      "رمز المقرر",
       "نوع الشعبة",
       "رقم الشعبة",
       "الرقم التدريبي",
@@ -539,6 +666,7 @@ function App() {
         state.trainer.name,
         state.trainer.employeeNumber,
         state.course.name,
+        state.course.code,
         kindLabel(state.course.kind),
         state.course.sectionNumber,
         trainee.trainingNumber,
@@ -747,6 +875,69 @@ function App() {
             <RefreshCw size={18} />
             استدعاء آخر حفظ
           </button>
+        </div>
+      </section>
+      <section className="course-code-panel" aria-label="رمز المقرر والانضمام">
+        <div className="code-card">
+          <div>
+            <p className="section-kicker">رمز المقرر</p>
+            <h2>{state.course.code || "سيتم توليده بعد إنشاء المقرر"}</h2>
+            <span>الرمز فريد ويتكون من حروف وأرقام. شاركه مع المدرب الآخر للبحث والانضمام لنفس المقرر.</span>
+          </div>
+          <button className="button" onClick={copyCourseCode} disabled={!state.course.code}>
+            <Copy size={18} />
+            نسخ الرمز
+          </button>
+        </div>
+        <div className="join-card">
+          <div className="panel-head">
+            <h2>البحث والانضمام برمز مقرر</h2>
+            <span>أدخل رمز المقرر، ثم راجع بيانات الكلية والمقرر والمدربين قبل الانضمام.</span>
+          </div>
+          <div className="join-form">
+            <input
+              value={courseCodeQuery}
+              placeholder="مثال: A7K2M9Q4"
+              onChange={(event) => setCourseCodeQuery(normalizeCourseCode(event.target.value))}
+            />
+            <button className="button primary" onClick={findCourseByCode}>
+              <Search size={18} />
+              بحث
+            </button>
+          </div>
+          {courseLookupMessage && <p className="helper-text">{courseLookupMessage}</p>}
+          {courseLookup && (
+            <div className="course-result">
+              <div>
+                <span>الكلية</span>
+                <strong>{courseLookup.state.account.collegeName || "-"}</strong>
+              </div>
+              <div>
+                <span>القسم</span>
+                <strong>{courseLookup.state.account.departmentName || "-"}</strong>
+              </div>
+              <div>
+                <span>المقرر</span>
+                <strong>{courseLookup.state.course.name || "-"}</strong>
+              </div>
+              <div>
+                <span>الشعبة</span>
+                <strong>{courseLookup.state.course.sectionNumber || "-"}</strong>
+              </div>
+              <div className="trainers-list">
+                <span>المدربون</span>
+                <strong>
+                  {courseLookup.trainers.map((trainer) => trainer.name || "مدرب بدون اسم").join("، ")}
+                </strong>
+              </div>
+              <button className="button primary" onClick={joinCourseByCode}>
+                الانضمام لهذا المقرر
+              </button>
+            </div>
+          )}
+          <p className="helper-text">
+            يعمل البحث بالرمز حاليًا داخل نفس المتصفح. للمشاركة بين أجهزة مختلفة نربطه لاحقًا بقاعدة بيانات سحابية.
+          </p>
         </div>
       </section>
       <section className="setup-panel" id="onboarding">

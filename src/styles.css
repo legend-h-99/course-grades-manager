@@ -424,6 +424,88 @@ h2 {
   border-color: rgba(255, 255, 255, 0.28);
 }
 
+.course-code-panel {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.45fr) minmax(0, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.code-card,
+.join-card {
+  background: #ffffff;
+  border: 1px solid #dce3e7;
+  border-radius: 8px;
+  padding: 16px;
+  animation: fadeUp 560ms ease both;
+}
+
+.code-card {
+  display: grid;
+  align-content: space-between;
+  gap: 14px;
+  background: linear-gradient(135deg, #f6fbf8, #ffffff 70%);
+}
+
+.code-card h2 {
+  direction: ltr;
+  text-align: right;
+  font-size: clamp(24px, 4vw, 38px);
+  letter-spacing: 0;
+  color: #1f6f61;
+}
+
+.code-card span {
+  display: block;
+  color: #607077;
+  line-height: 1.7;
+}
+
+.join-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px;
+  gap: 10px;
+}
+
+.join-form input {
+  direction: ltr;
+  text-align: center;
+  font-weight: 900;
+}
+
+.course-result {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.course-result div {
+  border: 1px solid #e0e6e9;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fbfcfc;
+}
+
+.course-result span {
+  display: block;
+  color: #607077;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.course-result strong {
+  display: block;
+}
+
+.course-result .trainers-list {
+  grid-column: span 3;
+}
+
+.course-result .button {
+  min-height: 100%;
+}
+
 .auth-panel,
 .locked-panel {
   background: #ffffff;
@@ -919,6 +1001,7 @@ textarea {
   .home-panel,
   .auth-panel,
   .workflow,
+  .course-code-panel,
   .grades-layout {
     grid-template-columns: 1fr;
   }
@@ -976,8 +1059,14 @@ textarea {
   }
 
   .setup-grid,
-  .names-tools {
+  .names-tools,
+  .join-form,
+  .course-result {
     grid-template-columns: 1fr;
+  }
+
+  .course-result .trainers-list {
+    grid-column: auto;
   }
 
   .button,
