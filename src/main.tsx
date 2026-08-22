@@ -24,225 +24,35 @@ import {
 import { readSheet } from "read-excel-file/browser";
 import writeXlsxFile from "write-excel-file/browser";
 import type { SheetData } from "write-excel-file/browser";
+import {
+  applyCourseSection,
+  generateCourseCode,
+  getGradeValue,
+  getTraineeTotals,
+  kindLabel,
+  mapRowsToTrainees,
+  normalizeCourseCode,
+  numberOrZero,
+  parseCsv,
+  rowsToObjects,
+  starterState,
+  today,
+  trainerEntry,
+  withCourseTrainer
+} from "./courseData";
 import "./styles.css";
-
-type AssessmentKind = "theory" | "practical";
-
-type TrainerProfile = {
-  name: string;
-  employeeNumber: string;
-};
-
-type AccountProfile = {
-  collegeName: string;
-  departmentName: string;
-  majorName: string;
-};
-
-type CourseSetup = {
-  name: string;
-  kind: AssessmentKind;
-  sectionNumber: string;
-  savedAt: string;
-  code: string;
-};
-
-type Trainee = {
-  id: string;
-  trainingNumber: string;
-  name: string;
-  theorySection: string;
-  practicalSection: string;
-};
-
-type Assessment = {
-  id: string;
-  name: string;
-  kind: AssessmentKind;
-  maxScore: number;
-  date: string;
-};
-
-type Grade = {
-  traineeId: string;
-  assessmentId: string;
-  score: number | "";
-};
-
-type CourseTrainer = TrainerProfile & {
-  userId: string;
-  joinedAt: string;
-};
-
-type AppState = {
-  account: AccountProfile;
-  trainer: TrainerProfile;
-  trainers: CourseTrainer[];
-  course: CourseSetup;
-  trainees: Trainee[];
-  assessments: Assessment[];
-  grades: Grade[];
-};
-
-type CourseRecord = {
-  code: string;
-  state: AppState;
-  trainers: CourseTrainer[];
-  updatedAt: string;
-};
-
-type AuthUser = {
-  id: string;
-  fullName: string;
-  email: string;
-  password: string;
-  createdAt: string;
-};
-
-type AppPage = "home" | "register" | "login" | "app";
-
-const LEGACY_STORAGE_KEY = "shared-course-grades-v3";
-const WORKSPACE_PREFIX = "shared-course-workspace-v1:";
-const COURSE_DIRECTORY_KEY = "shared-course-directory-v1";
-const AUTH_USERS_KEY = "shared-course-auth-users-v1";
-const AUTH_SESSION_KEY = "shared-course-auth-session-v1";
-
-function today() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-const starterState: AppState = {
-  account: { collegeName: "", departmentName: "", majorName: "" },
-  trainer: { name: "", employeeNumber: "" },
-  trainers: [],
-  course: { name: "", kind: "theory", sectionNumber: "", savedAt: "", code: "" },
-  trainees: [],
-  assessments: [
-    { id: crypto.randomUUID(), name: "اختبار نظري 1", kind: "theory", maxScore: 20, date: today() },
-    { id: crypto.randomUUID(), name: "تقييم عملي 1", kind: "practical", maxScore: 30, date: today() }
-  ],
-  grades: []
-};
-
-function workspaceKey(userId: string) {
-  return `${WORKSPACE_PREFIX}${userId}`;
-}
-
-function readStateFromStorage(key: string): AppState {
-  const raw = localStorage.getItem(key);
-  if (!raw) return starterState;
-  try {
-    const parsed = JSON.parse(raw) as AppState;
-    return {
-      ...starterState,
-      ...parsed,
-      account: { ...starterState.account, ...parsed.account },
-      trainer: { ...starterState.trainer, ...parsed.trainer },
-      trainers: parsed.trainers ?? [],
-      course: { ...starterState.course, ...parsed.course }
-    };
-  } catch {
-    return starterState;
-  }
-}
-
-function readCourseDirectory(): CourseRecord[] {
-  const raw = localStorage.getItem(COURSE_DIRECTORY_KEY);
-  if (!raw) return [];
-  try {
-    return JSON.parse(raw) as CourseRecord[];
-  } catch {
-    return [];
-  }
-}
-
-function saveCourseDirectory(records: CourseRecord[]) {
-  localStorage.setItem(COURSE_DIRECTORY_KEY, JSON.stringify(records));
-}
-
-function normalizeCourseCode(value: string) {
-  return value.trim().replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
-}
-
-function generateCourseCode(records: CourseRecord[]) {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let code = "";
-  do {
-    code = Array.from({ length: 8 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
-  } while (records.some((record) => record.code === code));
-  return code;
-}
-
-function trainerEntry(userId: string, trainer: TrainerProfile): CourseTrainer {
-  return {
-    userId,
-    name: trainer.name,
-    employeeNumber: trainer.employeeNumber,
-    joinedAt: new Date().toISOString()
-  };
-}
-
-function mergeTrainer(trainers: CourseTrainer[], trainer: CourseTrainer) {
-  return trainers.some((item) => item.userId === trainer.userId)
-    ? trainers.map((item) => (item.userId === trainer.userId ? { ...item, ...trainer } : item))
-    : [...trainers, trainer];
-}
-
-function withCourseTrainer(userId: string, appState: AppState) {
-  const trainer = trainerEntry(userId, appState.trainer);
-  return {
-    ...appState,
-    trainers: mergeTrainer(appState.trainers ?? [], trainer)
-  };
-}
-
-function upsertCourseRecord(userId: string, appState: AppState) {
-  if (!appState.course.code) return;
-  const records = readCourseDirectory();
-  const index = records.findIndex((record) => record.code === appState.course.code);
-  const nextState = withCourseTrainer(userId, appState);
-  const nextTrainer = nextState.trainers.find((trainer) => trainer.userId === userId) ?? trainerEntry(userId, appState.trainer);
-
-  if (index >= 0) {
-    const record = records[index];
-    const trainers = mergeTrainer(record.trainers ?? [], nextTrainer);
-    records[index] = { ...record, state: { ...nextState, trainers }, trainers, updatedAt: new Date().toISOString() };
-  } else {
-    records.push({
-      code: nextState.course.code,
-      state: nextState,
-      trainers: nextState.trainers,
-      updatedAt: new Date().toISOString()
-    });
-  }
-  saveCourseDirectory(records);
-}
-
-function readWorkspace(userId: string): AppState {
-  const saved = localStorage.getItem(workspaceKey(userId));
-  if (saved) return readStateFromStorage(workspaceKey(userId));
-  const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
-  return legacy ? readStateFromStorage(LEGACY_STORAGE_KEY) : starterState;
-}
-
-function saveWorkspace(userId: string, appState: AppState) {
-  localStorage.setItem(workspaceKey(userId), JSON.stringify(appState));
-  upsertCourseRecord(userId, appState);
-}
-
-function readAuthUsers(): AuthUser[] {
-  const raw = localStorage.getItem(AUTH_USERS_KEY);
-  if (!raw) return [];
-  try {
-    return JSON.parse(raw) as AuthUser[];
-  } catch {
-    return [];
-  }
-}
-
-function readCurrentUserId() {
-  return localStorage.getItem(AUTH_SESSION_KEY);
-}
+import {
+  clearWorkspace,
+  readAuthUsers,
+  readCourseDirectory,
+  readCurrentUserId,
+  readWorkspace,
+  saveAuthUsers,
+  saveCurrentUserId,
+  saveWorkspace,
+  upsertCourseRecord
+} from "./storage";
+import type { AppPage, AppState, Assessment, AssessmentKind, AuthUser, CourseRecord, Grade, Trainee } from "./types";
 
 function readInitialPage(): AppPage {
   const hashPath = window.location.hash.replace(/^#\/?/, "");
@@ -266,73 +76,6 @@ function formatSavedAt(value: string) {
     dateStyle: "medium",
     timeStyle: "short"
   }).format(new Date(value));
-}
-
-function normalizeKey(key: string) {
-  return key.trim().replace(/\s+/g, "").toLowerCase();
-}
-
-function pick(row: Record<string, unknown>, names: string[]) {
-  const entries = Object.entries(row);
-  for (const wanted of names.map(normalizeKey)) {
-    const match = entries.find(([key]) => normalizeKey(key) === wanted);
-    if (match && match[1] !== undefined && match[1] !== null) return String(match[1]).trim();
-  }
-  return "";
-}
-
-function rowsToObjects(rows: unknown[][]) {
-  const [headerRow, ...bodyRows] = rows;
-  const headers = (headerRow ?? []).map((cell) => String(cell ?? "").trim());
-  return bodyRows.map((row) => {
-    return headers.reduce<Record<string, unknown>>((record, header, index) => {
-      if (header) record[header] = row[index];
-      return record;
-    }, {});
-  });
-}
-
-function parseCsv(text: string) {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let cell = "";
-  let quoted = false;
-
-  for (let index = 0; index < text.length; index += 1) {
-    const char = text[index];
-    const next = text[index + 1];
-
-    if (char === '"' && quoted && next === '"') {
-      cell += '"';
-      index += 1;
-    } else if (char === '"') {
-      quoted = !quoted;
-    } else if (char === "," && !quoted) {
-      row.push(cell.trim());
-      cell = "";
-    } else if ((char === "\n" || char === "\r") && !quoted) {
-      if (char === "\r" && next === "\n") index += 1;
-      row.push(cell.trim());
-      if (row.some(Boolean)) rows.push(row);
-      row = [];
-      cell = "";
-    } else {
-      cell += char;
-    }
-  }
-
-  row.push(cell.trim());
-  if (row.some(Boolean)) rows.push(row);
-  return rowsToObjects(rows);
-}
-
-function numberOrZero(value: unknown) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function kindLabel(kind: AssessmentKind) {
-  return kind === "theory" ? "نظري" : "عملي";
 }
 
 function App() {
@@ -369,15 +112,11 @@ function App() {
   }, [currentUserId, state]);
 
   useEffect(() => {
-    localStorage.setItem(AUTH_USERS_KEY, JSON.stringify(authUsers));
+    saveAuthUsers(authUsers);
   }, [authUsers]);
 
   useEffect(() => {
-    if (currentUserId) {
-      localStorage.setItem(AUTH_SESSION_KEY, currentUserId);
-    } else {
-      localStorage.removeItem(AUTH_SESSION_KEY);
-    }
+    saveCurrentUserId(currentUserId);
   }, [currentUserId]);
 
   useEffect(() => {
@@ -716,11 +455,7 @@ function App() {
   function resetAll() {
     const confirmed = window.confirm("سيتم حذف البيانات الحالية من هذا المتصفح. هل تريد المتابعة؟");
     if (confirmed) {
-      if (currentUserId) {
-        localStorage.removeItem(workspaceKey(currentUserId));
-      } else {
-        localStorage.removeItem(LEGACY_STORAGE_KEY);
-      }
+      clearWorkspace(currentUserId);
       setState(starterState);
       setActiveCardId(null);
       setManualNames("");
@@ -1523,52 +1258,6 @@ function ScoreGroup({
       {!assessments.length && <p className="muted">لم تضاف اختبارات لهذا النوع.</p>}
     </div>
   );
-}
-
-function mapRowsToTrainees(rows: Record<string, unknown>[], course: CourseSetup) {
-  return rows
-    .map((row, index) => {
-      const trainingNumber =
-        pick(row, ["الرقم التدريبي", "رقم المتدرب", "رقم", "trainingNumber", "id"]) ||
-        String(index + 1);
-      const name = pick(row, ["اسم المتدرب", "الاسم", "اسم", "name"]);
-      if (!name) return null;
-      return applyCourseSection(
-        {
-          id: crypto.randomUUID(),
-          trainingNumber,
-          name,
-          theorySection: pick(row, ["الشعبة النظرية", "شعبة نظري", "نظري", "theorySection"]),
-          practicalSection: pick(row, ["الشعبة العملية", "شعبة عملي", "عملي", "practicalSection"])
-        },
-        course
-      );
-    })
-    .filter(Boolean) as Trainee[];
-}
-
-function applyCourseSection(trainee: Trainee, course: CourseSetup) {
-  if (!course.sectionNumber.trim()) return trainee;
-  if (course.kind === "theory") {
-    return { ...trainee, theorySection: trainee.theorySection || course.sectionNumber };
-  }
-  return { ...trainee, practicalSection: trainee.practicalSection || course.sectionNumber };
-}
-
-function getGradeValue(traineeId: string, assessmentId: string, grades: Grade[]) {
-  return grades.find((grade) => grade.traineeId === traineeId && grade.assessmentId === assessmentId)?.score ?? "";
-}
-
-function getTraineeTotals(traineeId: string, assessments: Assessment[], grades: Grade[]) {
-  const theoryIds = new Set(assessments.filter((item) => item.kind === "theory").map((item) => item.id));
-  const practicalIds = new Set(assessments.filter((item) => item.kind === "practical").map((item) => item.id));
-  const theory = grades
-    .filter((grade) => grade.traineeId === traineeId && theoryIds.has(grade.assessmentId))
-    .reduce((sum, grade) => sum + numberOrZero(grade.score), 0);
-  const practical = grades
-    .filter((grade) => grade.traineeId === traineeId && practicalIds.has(grade.assessmentId))
-    .reduce((sum, grade) => sum + numberOrZero(grade.score), 0);
-  return { theory, practical, total: theory + practical };
 }
 
 createRoot(document.getElementById("root")!).render(<App />);
