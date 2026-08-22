@@ -69,18 +69,19 @@ type Grade = {
   score: number | "";
 };
 
+type CourseTrainer = TrainerProfile & {
+  userId: string;
+  joinedAt: string;
+};
+
 type AppState = {
   account: AccountProfile;
   trainer: TrainerProfile;
+  trainers: CourseTrainer[];
   course: CourseSetup;
   trainees: Trainee[];
   assessments: Assessment[];
   grades: Grade[];
-};
-
-type CourseTrainer = TrainerProfile & {
-  userId: string;
-  joinedAt: string;
 };
 
 type CourseRecord = {
@@ -113,6 +114,7 @@ function today() {
 const starterState: AppState = {
   account: { collegeName: "", departmentName: "", majorName: "" },
   trainer: { name: "", employeeNumber: "" },
+  trainers: [],
   course: { name: "", kind: "theory", sectionNumber: "", savedAt: "", code: "" },
   trainees: [],
   assessments: [
@@ -136,6 +138,7 @@ function readStateFromStorage(key: string): AppState {
       ...parsed,
       account: { ...starterState.account, ...parsed.account },
       trainer: { ...starterState.trainer, ...parsed.trainer },
+      trainers: parsed.trainers ?? [],
       course: { ...starterState.course, ...parsed.course }
     };
   } catch {
@@ -179,23 +182,36 @@ function trainerEntry(userId: string, trainer: TrainerProfile): CourseTrainer {
   };
 }
 
+function mergeTrainer(trainers: CourseTrainer[], trainer: CourseTrainer) {
+  return trainers.some((item) => item.userId === trainer.userId)
+    ? trainers.map((item) => (item.userId === trainer.userId ? { ...item, ...trainer } : item))
+    : [...trainers, trainer];
+}
+
+function withCourseTrainer(userId: string, appState: AppState) {
+  const trainer = trainerEntry(userId, appState.trainer);
+  return {
+    ...appState,
+    trainers: mergeTrainer(appState.trainers ?? [], trainer)
+  };
+}
+
 function upsertCourseRecord(userId: string, appState: AppState) {
   if (!appState.course.code) return;
   const records = readCourseDirectory();
   const index = records.findIndex((record) => record.code === appState.course.code);
-  const nextTrainer = trainerEntry(userId, appState.trainer);
+  const nextState = withCourseTrainer(userId, appState);
+  const nextTrainer = nextState.trainers.find((trainer) => trainer.userId === userId) ?? trainerEntry(userId, appState.trainer);
 
   if (index >= 0) {
     const record = records[index];
-    const trainers = record.trainers.some((trainer) => trainer.userId === userId)
-      ? record.trainers.map((trainer) => (trainer.userId === userId ? { ...trainer, ...nextTrainer } : trainer))
-      : [...record.trainers, nextTrainer];
-    records[index] = { ...record, state: appState, trainers, updatedAt: new Date().toISOString() };
+    const trainers = mergeTrainer(record.trainers ?? [], nextTrainer);
+    records[index] = { ...record, state: { ...nextState, trainers }, trainers, updatedAt: new Date().toISOString() };
   } else {
     records.push({
-      code: appState.course.code,
-      state: appState,
-      trainers: [nextTrainer],
+      code: nextState.course.code,
+      state: nextState,
+      trainers: nextState.trainers,
       updatedAt: new Date().toISOString()
     });
   }
@@ -424,6 +440,11 @@ function App() {
     ? totals.reduce((sum, item) => sum + item.total, 0) / totals.length
     : 0;
   const currentUser = authUsers.find((user) => user.id === currentUserId) ?? null;
+  const courseTrainers = state.trainers.length
+    ? state.trainers
+    : currentUserId && state.trainer.name
+      ? [trainerEntry(currentUserId, state.trainer)]
+      : [];
 
   const setupReady = Boolean(
     state.account.collegeName.trim() &&
@@ -439,11 +460,12 @@ function App() {
       const records = readCourseDirectory();
       const courseCode = current.course.code || generateCourseCode(records);
       const course = { ...current.course, code: courseCode, savedAt: new Date().toISOString() };
-      const nextState = {
+      const nextStateBase = {
         ...current,
         course,
         trainees: current.trainees.map((trainee) => applyCourseSection(trainee, course))
       };
+      const nextState = currentUserId ? withCourseTrainer(currentUserId, nextStateBase) : nextStateBase;
       if (currentUserId) upsertCourseRecord(currentUserId, nextState);
       setStorageMessage(`تم إنشاء رمز المقرر: ${courseCode}`);
       return nextState;
@@ -463,10 +485,10 @@ function App() {
       return;
     }
     const user = { id: crypto.randomUUID(), fullName, email, password, createdAt: new Date().toISOString() };
-    const nextState = {
+    const nextState = withCourseTrainer(user.id, {
       ...starterState,
       trainer: { ...starterState.trainer, name: fullName }
-    };
+    });
     setAuthUsers((users) => [...users, user]);
     saveWorkspace(user.id, nextState);
     setState(nextState);
@@ -503,7 +525,9 @@ function App() {
 
   function saveNow() {
     if (!currentUserId) return;
-    saveWorkspace(currentUserId, state);
+    const nextState = withCourseTrainer(currentUserId, state);
+    setState(nextState);
+    saveWorkspace(currentUserId, nextState);
     setLastSavedAt(new Date().toISOString());
     setStorageMessage("تم حفظ البيانات الحالية.");
   }
@@ -528,13 +552,14 @@ function App() {
 
   function joinCourseByCode() {
     if (!currentUserId || !courseLookup) return;
-    const joinedState = {
+    const joinedState = withCourseTrainer(currentUserId, {
       ...courseLookup.state,
+      trainers: courseLookup.trainers ?? courseLookup.state.trainers ?? [],
       trainer: {
         name: currentUser?.fullName || state.trainer.name,
         employeeNumber: state.trainer.employeeNumber
       }
-    };
+    });
     setState(joinedState);
     saveWorkspace(currentUserId, joinedState);
     setCourseLookupMessage("تم الانضمام للمقرر واستدعاء بياناته.");
@@ -644,6 +669,7 @@ function App() {
       "التخصص",
       "اسم المدرب",
       "الرقم الوظيفي",
+      "مدربو المقرر",
       "اسم المقرر",
       "رمز المقرر",
       "نوع الشعبة",
@@ -665,6 +691,7 @@ function App() {
         state.account.majorName,
         state.trainer.name,
         state.trainer.employeeNumber,
+        courseTrainers.map((trainer) => trainer.name || "مدرب بدون اسم").join("، "),
         state.course.name,
         state.course.code,
         kindLabel(state.course.kind),
@@ -888,6 +915,16 @@ function App() {
             <Copy size={18} />
             نسخ الرمز
           </button>
+          <div className="trainer-stack">
+            <span>مدربو المقرر</span>
+            {courseTrainers.map((trainer) => (
+              <strong key={trainer.userId}>
+                {trainer.name || "مدرب بدون اسم"}
+                {trainer.employeeNumber ? ` - ${trainer.employeeNumber}` : ""}
+              </strong>
+            ))}
+            {!courseTrainers.length && <strong>لم يتم ربط مدربين بعد</strong>}
+          </div>
         </div>
         <div className="join-card">
           <div className="panel-head">
@@ -1056,6 +1093,18 @@ function App() {
             <Save size={18} />
             إنشاء الحساب
           </button>
+        </div>
+        <div className="linked-trainers" aria-label="مدربو المقرر">
+          <span>مدربو هذا المقرر</span>
+          <div>
+            {courseTrainers.map((trainer) => (
+              <strong key={trainer.userId}>
+                {trainer.name || "مدرب بدون اسم"}
+                {trainer.employeeNumber ? ` - ${trainer.employeeNumber}` : ""}
+              </strong>
+            ))}
+            {!courseTrainers.length && <strong>احفظ بيانات المقرر لإضافة المدرب الحالي.</strong>}
+          </div>
         </div>
       </section>
 

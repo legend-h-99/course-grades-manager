@@ -461,6 +461,36 @@ h2 {
   line-height: 1.7;
 }
 
+.trainer-stack,
+.linked-trainers {
+  border: 1px solid #dbe8e3;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fbfdfc;
+}
+
+.trainer-stack span,
+.linked-trainers span {
+  display: block;
+  color: #607077;
+  font-size: 13px;
+  font-weight: 800;
+  margin-bottom: 7px;
+}
+
+.trainer-stack strong,
+.linked-trainers strong {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  margin: 0 0 6px 6px;
+  padding: 0 9px;
+  border-radius: 8px;
+  background: #e8f3ee;
+  color: #1f6f61;
+  font-size: 13px;
+}
+
 .join-form {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 120px;
@@ -619,6 +649,10 @@ h2 {
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 10px;
   align-items: end;
+}
+
+.linked-trainers {
+  margin-top: 12px;
 }
 
 .setup-grid label {
