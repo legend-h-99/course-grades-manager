@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { cp, mkdir, writeFile } from "node:fs/promises";
 
 const worker = `const cacheHeaders = {
   "Cache-Control": "public, max-age=31536000, immutable"
@@ -40,3 +40,9 @@ export default {
 
 await mkdir("dist/server", { recursive: true });
 await writeFile("dist/server/index.js", worker);
+await mkdir("dist/public", { recursive: true });
+await mkdir("dist/client", { recursive: true });
+await cp("dist/index.html", "dist/public/index.html");
+await cp("dist/index.html", "dist/client/index.html");
+await cp("dist/assets", "dist/public/assets", { recursive: true });
+await cp("dist/assets", "dist/client/assets", { recursive: true });
