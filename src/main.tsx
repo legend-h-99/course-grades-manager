@@ -147,6 +147,10 @@ function readCurrentUserId() {
 }
 
 function readInitialPage(): AppPage {
+  const hashPath = window.location.hash.replace(/^#\/?/, "");
+  if (hashPath === "register") return "register";
+  if (hashPath === "login") return "login";
+  if (hashPath === "app") return "app";
   const pathname = window.location.pathname.replace(/\/+$/, "");
   if (pathname === "/register") return "register";
   if (pathname === "/login") return "login";
@@ -155,7 +159,7 @@ function readInitialPage(): AppPage {
 }
 
 function pagePath(page: AppPage) {
-  return page === "home" ? "/" : `/${page}`;
+  return page === "home" ? "/" : `/#/${page}`;
 }
 
 function formatSavedAt(value: string) {
@@ -280,14 +284,24 @@ function App() {
   }, [state.course.kind]);
 
   useEffect(() => {
-    const handlePopState = () => {
+    const handleLocationChange = () => {
       const nextPage = readInitialPage();
       setPage(nextPage);
       if (nextPage === "login" || nextPage === "register") setAuthMode(nextPage);
     };
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
+    window.addEventListener("popstate", handleLocationChange);
+    window.addEventListener("hashchange", handleLocationChange);
+    return () => {
+      window.removeEventListener("popstate", handleLocationChange);
+      window.removeEventListener("hashchange", handleLocationChange);
+    };
   }, []);
+
+  useEffect(() => {
+    if (currentUserId && (page === "login" || page === "register")) {
+      goTo("app");
+    }
+  }, [currentUserId, page]);
 
   function goTo(nextPage: AppPage) {
     setPage(nextPage);
