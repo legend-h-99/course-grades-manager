@@ -41,18 +41,18 @@ import {
   withCourseTrainer
 } from "./courseData";
 import "./styles.css";
+import { supabase } from "./supabase";
 import {
   clearWorkspace,
-  readAuthUsers,
-  readCourseDirectory,
-  readCurrentUserId,
-  readWorkspace,
-  saveAuthUsers,
-  saveCurrentUserId,
+  findCourseByCode as dbFindCourseByCode,
+  joinCourse,
+  loadWorkspace,
   saveWorkspace,
-  upsertCourseRecord
+  type CoursePreview
 } from "./storage";
-import type { AppPage, AppState, Assessment, AssessmentKind, AuthUser, CourseRecord, Grade, Trainee } from "./types";
+import type { AppPage, AppState, Assessment, AssessmentKind, Grade, Trainee } from "./types";
+
+type SessionUser = { id: string; fullName: string; email: string };
 
 function readInitialPage(): AppPage {
   const hashPath = window.location.hash.replace(/^#\/?/, "");
@@ -79,10 +79,9 @@ function formatSavedAt(value: string) {
 }
 
 function App() {
-  const initialUserId = readCurrentUserId();
-  const [state, setState] = useState<AppState>(() => (initialUserId ? readWorkspace(initialUserId) : starterState));
-  const [authUsers, setAuthUsers] = useState<AuthUser[]>(readAuthUsers);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(initialUserId);
+  const [state, setState] = useState<AppState>(starterState);
+  const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [page, setPage] = useState<AppPage>(readInitialPage);
   const [authMode, setAuthMode] = useState<"register" | "login">(
     readInitialPage() === "login" ? "login" : "register"
@@ -93,7 +92,7 @@ function App() {
   const [lastSavedAt, setLastSavedAt] = useState("");
   const [courseCodeQuery, setCourseCodeQuery] = useState("");
   const [courseLookupMessage, setCourseLookupMessage] = useState("");
-  const [courseLookup, setCourseLookup] = useState<CourseRecord | null>(null);
+  const [courseLookup, setCourseLookup] = useState<CoursePreview | null>(null);
   const [query, setQuery] = useState("");
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [manualNames, setManualNames] = useState("");
@@ -105,19 +104,43 @@ function App() {
     date: today()
   });
 
+  // Bootstrap Supabase auth session on mount
   useEffect(() => {
-    if (!currentUserId) return;
-    saveWorkspace(currentUserId, state);
-    setLastSavedAt(new Date().toISOString());
-  }, [currentUserId, state]);
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        const user = session.user;
+        const sessionUser: SessionUser = {
+          id: user.id,
+          email: user.email ?? "",
+          fullName: (user.user_metadata?.full_name as string) ?? ""
+        };
+        setCurrentUser(sessionUser);
+        const workspace = await loadWorkspace(user.id);
+        setState(workspace);
+        setLastSavedAt(workspace.course.savedAt);
+        goTo("app");
+      }
+      setIsLoading(false);
+    });
 
-  useEffect(() => {
-    saveAuthUsers(authUsers);
-  }, [authUsers]);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === "SIGNED_IN" && session?.user) {
+        const user = session.user;
+        const sessionUser: SessionUser = {
+          id: user.id,
+          email: user.email ?? "",
+          fullName: (user.user_metadata?.full_name as string) ?? ""
+        };
+        setCurrentUser(sessionUser);
+      } else if (event === "SIGNED_OUT") {
+        setCurrentUser(null);
+        setState(starterState);
+      }
+    });
 
-  useEffect(() => {
-    saveCurrentUserId(currentUserId);
-  }, [currentUserId]);
+    return () => subscription.unsubscribe();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     setAssessmentDraft((draft) => ({ ...draft, kind: state.course.kind }));
@@ -138,10 +161,10 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (currentUserId && (page === "login" || page === "register")) {
+    if (currentUser && (page === "login" || page === "register")) {
       goTo("app");
     }
-  }, [currentUserId, page]);
+  }, [currentUser, page]);
 
   function goTo(nextPage: AppPage) {
     setPage(nextPage);
@@ -178,11 +201,11 @@ function App() {
   const average = totals.length
     ? totals.reduce((sum, item) => sum + item.total, 0) / totals.length
     : 0;
-  const currentUser = authUsers.find((user) => user.id === currentUserId) ?? null;
+
   const courseTrainers = state.trainers.length
     ? state.trainers
-    : currentUserId && state.trainer.name
-      ? [trainerEntry(currentUserId, state.trainer)]
+    : currentUser && state.trainer.name
+      ? [trainerEntry(currentUser.id, state.trainer)]
       : [];
 
   const setupReady = Boolean(
@@ -193,116 +216,127 @@ function App() {
       state.course.sectionNumber.trim()
   );
 
-  function saveSetup() {
-    if (!setupReady) return;
-    setState((current) => {
-      const records = readCourseDirectory();
-      const courseCode = current.course.code || generateCourseCode(records);
-      const course = { ...current.course, code: courseCode, savedAt: new Date().toISOString() };
-      const nextStateBase = {
-        ...current,
-        course,
-        trainees: current.trainees.map((trainee) => applyCourseSection(trainee, course))
-      };
-      const nextState = currentUserId ? withCourseTrainer(currentUserId, nextStateBase) : nextStateBase;
-      if (currentUserId) upsertCourseRecord(currentUserId, nextState);
-      setStorageMessage(`تم إنشاء رمز المقرر: ${courseCode}`);
-      return nextState;
-    });
+  async function saveSetup() {
+    if (!setupReady || !currentUser) return;
+    const courseCode = state.course.code || generateCourseCode([]);
+    const course = { ...state.course, code: courseCode, savedAt: new Date().toISOString() };
+    const nextStateBase = {
+      ...state,
+      course,
+      trainees: state.trainees.map((trainee) => applyCourseSection(trainee, course))
+    };
+    const nextState = withCourseTrainer(currentUser.id, nextStateBase);
+    setState(nextState);
+    await saveWorkspace(currentUser.id, nextState);
+    setLastSavedAt(new Date().toISOString());
+    setStorageMessage(`تم إنشاء رمز المقرر: ${courseCode}`);
   }
 
-  function registerUser() {
+  async function registerUser() {
     const fullName = authDraft.fullName.trim();
     const email = authDraft.email.trim().toLowerCase();
     const password = authDraft.password.trim();
-    if (!fullName || !email || password.length < 4) {
-      setAuthMessage("أدخل الاسم والبريد وكلمة مرور من 4 أحرف على الأقل.");
+    if (!fullName || !email || password.length < 6) {
+      setAuthMessage("أدخل الاسم والبريد وكلمة مرور من 6 أحرف على الأقل.");
       return;
     }
-    if (authUsers.some((user) => user.email === email)) {
-      setAuthMessage("يوجد حساب مسجل بهذا البريد.");
-      return;
-    }
-    const user = { id: crypto.randomUUID(), fullName, email, password, createdAt: new Date().toISOString() };
-    const nextState = withCourseTrainer(user.id, {
-      ...starterState,
-      trainer: { ...starterState.trainer, name: fullName }
+    setAuthMessage("جارٍ إنشاء الحساب...");
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: fullName } }
     });
-    setAuthUsers((users) => [...users, user]);
-    saveWorkspace(user.id, nextState);
+    if (error) {
+      setAuthMessage(error.message);
+      return;
+    }
+    if (!data.user) {
+      setAuthMessage("تحقق من بريدك الإلكتروني لتفعيل الحساب.");
+      return;
+    }
+    const sessionUser: SessionUser = { id: data.user.id, email, fullName };
+    const nextState = withCourseTrainer(data.user.id, { ...starterState, trainer: { ...starterState.trainer, name: fullName } });
+    setCurrentUser(sessionUser);
     setState(nextState);
-    setCurrentUserId(user.id);
     setAuthMessage("تم إنشاء الحساب وتسجيل الدخول.");
     setStorageMessage("تم إنشاء مساحة بيانات جديدة لهذا الحساب.");
     goTo("app");
   }
 
-  function loginUser() {
+  async function loginUser() {
     const email = authDraft.email.trim().toLowerCase();
     const password = authDraft.password.trim();
-    const user = authUsers.find((item) => item.email === email && item.password === password);
-    if (!user) {
+    setAuthMessage("جارٍ تسجيل الدخول...");
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error || !data.user) {
       setAuthMessage("بيانات الدخول غير صحيحة.");
       return;
     }
-    setState(readWorkspace(user.id));
-    setCurrentUserId(user.id);
-    setAuthDraft((draft) => ({ ...draft, fullName: user.fullName }));
+    const user = data.user;
+    const sessionUser: SessionUser = {
+      id: user.id,
+      email: user.email ?? "",
+      fullName: (user.user_metadata?.full_name as string) ?? ""
+    };
+    setCurrentUser(sessionUser);
+    const workspace = await loadWorkspace(user.id);
+    setState(workspace);
+    setLastSavedAt(workspace.course.savedAt);
     setAuthMessage("تم تسجيل الدخول.");
     setStorageMessage("تم استدعاء بيانات الحساب المحفوظة.");
     goTo("app");
   }
 
-  function logoutUser() {
-    if (currentUserId) saveWorkspace(currentUserId, state);
-    setCurrentUserId(null);
+  async function logoutUser() {
+    await supabase.auth.signOut();
+    setCurrentUser(null);
     setState(starterState);
+    setLastSavedAt("");
     setAuthMessage("تم تسجيل الخروج.");
     setStorageMessage("");
     goTo("login");
   }
 
-  function saveNow() {
-    if (!currentUserId) return;
-    const nextState = withCourseTrainer(currentUserId, state);
+  async function saveNow() {
+    if (!currentUser) return;
+    const nextState = withCourseTrainer(currentUser.id, state);
     setState(nextState);
-    saveWorkspace(currentUserId, nextState);
+    await saveWorkspace(currentUser.id, nextState);
     setLastSavedAt(new Date().toISOString());
     setStorageMessage("تم حفظ البيانات الحالية.");
   }
 
-  function restoreWorkspace() {
-    if (!currentUserId) return;
-    setState(readWorkspace(currentUserId));
+  async function restoreWorkspace() {
+    if (!currentUser) return;
+    const workspace = await loadWorkspace(currentUser.id);
+    setState(workspace);
+    setLastSavedAt(workspace.course.savedAt);
     setStorageMessage("تم استدعاء آخر نسخة محفوظة لهذا الحساب.");
   }
 
-  function findCourseByCode() {
+  async function findCourseByCode() {
     const code = normalizeCourseCode(courseCodeQuery);
     if (!code) {
       setCourseLookup(null);
       setCourseLookupMessage("أدخل رمز المقرر أولًا.");
       return;
     }
-    const record = readCourseDirectory().find((item) => item.code === code) ?? null;
+    setCourseLookupMessage("جارٍ البحث...");
+    const record = await dbFindCourseByCode(code);
     setCourseLookup(record);
-    setCourseLookupMessage(record ? "تم العثور على المقرر." : "لم يتم العثور على مقرر بهذا الرمز في هذا المتصفح.");
+    setCourseLookupMessage(record ? "تم العثور على المقرر." : "لم يتم العثور على مقرر بهذا الرمز.");
   }
 
-  function joinCourseByCode() {
-    if (!currentUserId || !courseLookup) return;
-    const joinedState = withCourseTrainer(currentUserId, {
-      ...courseLookup.state,
-      trainers: courseLookup.trainers ?? courseLookup.state.trainers ?? [],
-      trainer: {
-        name: currentUser?.fullName || state.trainer.name,
-        employeeNumber: state.trainer.employeeNumber
-      }
-    });
-    setState(joinedState);
-    saveWorkspace(currentUserId, joinedState);
+  async function joinCourseByCode() {
+    if (!currentUser || !courseLookup) return;
+    await joinCourse(currentUser.id, courseLookup, state.trainer.name || currentUser.fullName, state.trainer.employeeNumber);
+    const workspace = await loadWorkspace(currentUser.id);
+    setState(workspace);
+    setLastSavedAt(workspace.course.savedAt);
     setCourseLookupMessage("تم الانضمام للمقرر واستدعاء بياناته.");
     setStorageMessage(`تم الانضمام للمقرر برمز ${courseLookup.code}.`);
+    setCourseLookup(null);
+    setCourseCodeQuery("");
   }
 
   async function copyCourseCode() {
@@ -452,16 +486,24 @@ function App() {
     await writeXlsxFile(sheetData).toFile(`درجات-${state.course.name || "المقرر"}-${today()}.xlsx`);
   }
 
-  function resetAll() {
-    const confirmed = window.confirm("سيتم حذف البيانات الحالية من هذا المتصفح. هل تريد المتابعة؟");
-    if (confirmed) {
-      clearWorkspace(currentUserId);
+  async function resetAll() {
+    const confirmed = window.confirm("سيتم مسح بيانات المقرر الحالي. هل تريد المتابعة؟");
+    if (confirmed && currentUser) {
+      await clearWorkspace(currentUser.id);
       setState(starterState);
       setActiveCardId(null);
       setManualNames("");
       setImportMessage("");
-      setStorageMessage("تم حذف بيانات مساحة العمل الحالية.");
+      setStorageMessage("تم مسح بيانات مساحة العمل الحالية.");
     }
+  }
+
+  if (isLoading) {
+    return (
+      <main className="app-shell" style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh" }}>
+        <p style={{ opacity: 0.5 }}>جارٍ التحميل...</p>
+      </main>
+    );
   }
 
   return (
@@ -624,7 +666,7 @@ function App() {
       <section className="storage-panel" aria-label="حفظ واستدعاء البيانات">
         <div>
           <p className="section-kicker">حفظ واستدعاء</p>
-          <h2>بيانات هذا الحساب محفوظة محليًا وقابلة للاستدعاء</h2>
+          <h2>بيانات هذا الحساب محفوظة في قاعدة بيانات سحابية</h2>
           <span>آخر حفظ: {formatSavedAt(lastSavedAt || state.course.savedAt)}</span>
           {storageMessage && <strong>{storageMessage}</strong>}
         </div>
@@ -664,7 +706,7 @@ function App() {
         <div className="join-card">
           <div className="panel-head">
             <h2>البحث والانضمام برمز مقرر</h2>
-            <span>أدخل رمز المقرر، ثم راجع بيانات الكلية والمقرر والمدربين قبل الانضمام.</span>
+            <span>أدخل رمز المقرر، ثم راجع بيانات المقرر والمدربين قبل الانضمام.</span>
           </div>
           <div className="join-form">
             <input
@@ -681,20 +723,16 @@ function App() {
           {courseLookup && (
             <div className="course-result">
               <div>
-                <span>الكلية</span>
-                <strong>{courseLookup.state.account.collegeName || "-"}</strong>
-              </div>
-              <div>
-                <span>القسم</span>
-                <strong>{courseLookup.state.account.departmentName || "-"}</strong>
-              </div>
-              <div>
                 <span>المقرر</span>
-                <strong>{courseLookup.state.course.name || "-"}</strong>
+                <strong>{courseLookup.name || "-"}</strong>
+              </div>
+              <div>
+                <span>النوع</span>
+                <strong>{kindLabel(courseLookup.kind)}</strong>
               </div>
               <div>
                 <span>الشعبة</span>
-                <strong>{courseLookup.state.course.sectionNumber || "-"}</strong>
+                <strong>{courseLookup.sectionNumber || "-"}</strong>
               </div>
               <div className="trainers-list">
                 <span>المدربون</span>
@@ -707,9 +745,6 @@ function App() {
               </button>
             </div>
           )}
-          <p className="helper-text">
-            يعمل البحث بالرمز حاليًا داخل نفس المتصفح. للمشاركة بين أجهزة مختلفة نربطه لاحقًا بقاعدة بيانات سحابية.
-          </p>
         </div>
       </section>
       <section className="setup-panel" id="onboarding">
@@ -1099,7 +1134,7 @@ function AuthPanel({
       <div className="auth-copy">
         <p className="section-kicker">Onboarding</p>
         <h2>{isRegister ? "إنشاء حساب جديد" : "تسجيل الدخول"}</h2>
-        <p>ابدأ بحساب المدرب حتى يتم حفظ مساحة العمل على هذا الجهاز، ثم أكمل بيانات المقرر والمتدربين.</p>
+        <p>ابدأ بحساب المدرب حتى يتم حفظ مساحة العمل على السحابة، ثم أكمل بيانات المقرر والمتدربين.</p>
       </div>
       <div className="auth-form">
         <div className="auth-tabs" role="tablist" aria-label="التسجيل والدخول">
@@ -1134,7 +1169,7 @@ function AuthPanel({
           <input
             type="password"
             value={draft.password}
-            placeholder="4 أحرف على الأقل"
+            placeholder="6 أحرف على الأقل"
             onChange={(event) => onDraftChange({ ...draft, password: event.target.value })}
           />
         </label>
