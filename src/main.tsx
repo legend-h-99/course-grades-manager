@@ -6,10 +6,13 @@ import {
   FileUp,
   GraduationCap,
   IdCard,
+  LogIn,
+  LogOut,
   Plus,
   RotateCcw,
   Save,
   Search,
+  UserPlus,
   Users
 } from "lucide-react";
 import { readSheet } from "read-excel-file/browser";
@@ -68,7 +71,17 @@ type AppState = {
   grades: Grade[];
 };
 
+type AuthUser = {
+  id: string;
+  fullName: string;
+  email: string;
+  password: string;
+  createdAt: string;
+};
+
 const STORAGE_KEY = "shared-course-grades-v3";
+const AUTH_USERS_KEY = "shared-course-auth-users-v1";
+const AUTH_SESSION_KEY = "shared-course-auth-session-v1";
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -94,6 +107,20 @@ function readState(): AppState {
   } catch {
     return starterState;
   }
+}
+
+function readAuthUsers(): AuthUser[] {
+  const raw = localStorage.getItem(AUTH_USERS_KEY);
+  if (!raw) return [];
+  try {
+    return JSON.parse(raw) as AuthUser[];
+  } catch {
+    return [];
+  }
+}
+
+function readCurrentUserId() {
+  return localStorage.getItem(AUTH_SESSION_KEY);
 }
 
 function normalizeKey(key: string) {
@@ -165,6 +192,11 @@ function kindLabel(kind: AssessmentKind) {
 
 function App() {
   const [state, setState] = useState<AppState>(readState);
+  const [authUsers, setAuthUsers] = useState<AuthUser[]>(readAuthUsers);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(readCurrentUserId);
+  const [authMode, setAuthMode] = useState<"register" | "login">("register");
+  const [authDraft, setAuthDraft] = useState({ fullName: "", email: "", password: "" });
+  const [authMessage, setAuthMessage] = useState("");
   const [query, setQuery] = useState("");
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [manualNames, setManualNames] = useState("");
@@ -179,6 +211,18 @@ function App() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }, [state]);
+
+  useEffect(() => {
+    localStorage.setItem(AUTH_USERS_KEY, JSON.stringify(authUsers));
+  }, [authUsers]);
+
+  useEffect(() => {
+    if (currentUserId) {
+      localStorage.setItem(AUTH_SESSION_KEY, currentUserId);
+    } else {
+      localStorage.removeItem(AUTH_SESSION_KEY);
+    }
+  }, [currentUserId]);
 
   useEffect(() => {
     setAssessmentDraft((draft) => ({ ...draft, kind: state.course.kind }));
@@ -212,6 +256,7 @@ function App() {
   const average = totals.length
     ? totals.reduce((sum, item) => sum + item.total, 0) / totals.length
     : 0;
+  const currentUser = authUsers.find((user) => user.id === currentUserId) ?? null;
 
   const setupReady = Boolean(
     state.account.collegeName.trim() &&
@@ -228,6 +273,46 @@ function App() {
       course: { ...current.course, savedAt: new Date().toISOString() },
       trainees: current.trainees.map((trainee) => applyCourseSection(trainee, current.course))
     }));
+  }
+
+  function registerUser() {
+    const fullName = authDraft.fullName.trim();
+    const email = authDraft.email.trim().toLowerCase();
+    const password = authDraft.password.trim();
+    if (!fullName || !email || password.length < 4) {
+      setAuthMessage("أدخل الاسم والبريد وكلمة مرور من 4 أحرف على الأقل.");
+      return;
+    }
+    if (authUsers.some((user) => user.email === email)) {
+      setAuthMessage("يوجد حساب مسجل بهذا البريد.");
+      return;
+    }
+    const user = { id: crypto.randomUUID(), fullName, email, password, createdAt: new Date().toISOString() };
+    setAuthUsers((users) => [...users, user]);
+    setCurrentUserId(user.id);
+    setAuthMessage("تم إنشاء الحساب وتسجيل الدخول.");
+    setState((current) => ({
+      ...current,
+      trainer: { ...current.trainer, name: current.trainer.name || fullName }
+    }));
+  }
+
+  function loginUser() {
+    const email = authDraft.email.trim().toLowerCase();
+    const password = authDraft.password.trim();
+    const user = authUsers.find((item) => item.email === email && item.password === password);
+    if (!user) {
+      setAuthMessage("بيانات الدخول غير صحيحة.");
+      return;
+    }
+    setCurrentUserId(user.id);
+    setAuthDraft((draft) => ({ ...draft, fullName: user.fullName }));
+    setAuthMessage("تم تسجيل الدخول.");
+  }
+
+  function logoutUser() {
+    setCurrentUserId(null);
+    setAuthMessage("تم تسجيل الخروج.");
   }
 
   async function importTrainees(event: ChangeEvent<HTMLInputElement>) {
@@ -386,7 +471,24 @@ function App() {
           <h1>نظام إدارة درجات المقرر</h1>
         </div>
         <div className="top-actions">
-          <button className="button" onClick={exportWorkbook} disabled={!state.trainees.length}>
+          {currentUser ? (
+            <button className="button" onClick={logoutUser}>
+              <LogOut size={18} />
+              خروج
+            </button>
+          ) : (
+            <>
+              <a className="button" href="#auth" onClick={() => setAuthMode("login")}>
+                <LogIn size={18} />
+                دخول
+              </a>
+              <a className="button primary" href="#auth" onClick={() => setAuthMode("register")}>
+                <UserPlus size={18} />
+                حساب جديد
+              </a>
+            </>
+          )}
+          <button className="button" onClick={exportWorkbook} disabled={!currentUser || !state.trainees.length}>
             <Download size={18} />
             تصدير Excel
           </button>
@@ -404,8 +506,12 @@ function App() {
             صفحة عملية للمدربين تساعدك على إنشاء حساب المقرر، إضافة الشعب النظرية والعملية، استيراد المتدربين، رصد الدرجات، والاستعلام عن بطاقة أي متدرب بسرعة.
           </p>
           <div className="home-actions">
-            <a className="button primary" href="#onboarding">ابدأ الإعداد</a>
-            <a className="button" href="#grades">الانتقال للدرجات</a>
+            <a className="button primary" href={currentUser ? "#onboarding" : "#auth"} onClick={() => setAuthMode("register")}>
+              ابدأ الإعداد
+            </a>
+            <a className="button" href={currentUser ? "#grades" : "#auth"} onClick={() => setAuthMode("login")}>
+              تسجيل الدخول
+            </a>
           </div>
         </div>
         <div className="home-steps" aria-label="خطوات استخدام النظام">
@@ -424,6 +530,20 @@ function App() {
         </div>
       </section>
 
+      {!currentUser && (
+        <AuthPanel
+          mode={authMode}
+          draft={authDraft}
+          message={authMessage}
+          onModeChange={setAuthMode}
+          onDraftChange={setAuthDraft}
+          onRegister={registerUser}
+          onLogin={loginUser}
+        />
+      )}
+
+      {currentUser ? (
+        <>
       <section className="setup-panel" id="onboarding">
         <div className="setup-heading">
           <div>
@@ -756,7 +876,87 @@ function App() {
           <TraineeCard trainee={activeCard} assessments={state.assessments} grades={state.grades} />
         </div>
       </section>
+        </>
+      ) : (
+        <section className="locked-panel">
+          <IdCard size={32} />
+          <h2>سجل الدخول للمتابعة</h2>
+          <p>بعد إنشاء الحساب أو تسجيل الدخول ستظهر لك خطوات إنشاء المقرر، إضافة المتدربين، ورصد الدرجات.</p>
+        </section>
+      )}
     </main>
+  );
+}
+
+function AuthPanel({
+  mode,
+  draft,
+  message,
+  onModeChange,
+  onDraftChange,
+  onRegister,
+  onLogin
+}: {
+  mode: "register" | "login";
+  draft: { fullName: string; email: string; password: string };
+  message: string;
+  onModeChange: (mode: "register" | "login") => void;
+  onDraftChange: (draft: { fullName: string; email: string; password: string }) => void;
+  onRegister: () => void;
+  onLogin: () => void;
+}) {
+  const isRegister = mode === "register";
+  return (
+    <section className="auth-panel" id="auth">
+      <div className="auth-copy">
+        <p className="section-kicker">Onboarding</p>
+        <h2>{isRegister ? "إنشاء حساب جديد" : "تسجيل الدخول"}</h2>
+        <p>ابدأ بحساب المدرب حتى يتم حفظ مساحة العمل على هذا الجهاز، ثم أكمل بيانات المقرر والمتدربين.</p>
+      </div>
+      <div className="auth-form">
+        <div className="auth-tabs" role="tablist" aria-label="التسجيل والدخول">
+          <button className={isRegister ? "active" : ""} onClick={() => onModeChange("register")}>
+            إنشاء حساب
+          </button>
+          <button className={!isRegister ? "active" : ""} onClick={() => onModeChange("login")}>
+            دخول
+          </button>
+        </div>
+        {isRegister && (
+          <label>
+            اسم المستخدم
+            <input
+              value={draft.fullName}
+              placeholder="اسم المدرب"
+              onChange={(event) => onDraftChange({ ...draft, fullName: event.target.value })}
+            />
+          </label>
+        )}
+        <label>
+          البريد الإلكتروني
+          <input
+            type="email"
+            value={draft.email}
+            placeholder="name@example.com"
+            onChange={(event) => onDraftChange({ ...draft, email: event.target.value })}
+          />
+        </label>
+        <label>
+          كلمة المرور
+          <input
+            type="password"
+            value={draft.password}
+            placeholder="4 أحرف على الأقل"
+            onChange={(event) => onDraftChange({ ...draft, password: event.target.value })}
+          />
+        </label>
+        {message && <p className="auth-message">{message}</p>}
+        <button className="button primary" onClick={isRegister ? onRegister : onLogin}>
+          {isRegister ? <UserPlus size={18} /> : <LogIn size={18} />}
+          {isRegister ? "إنشاء الحساب" : "تسجيل الدخول"}
+        </button>
+      </div>
+    </section>
   );
 }
 

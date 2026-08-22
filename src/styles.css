@@ -13,6 +13,17 @@ body {
   margin: 0;
 }
 
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 button,
 input,
 select {
@@ -51,6 +62,7 @@ a {
   border-radius: 8px;
   padding: 18px;
   margin-bottom: 16px;
+  animation: fadeUp 520ms ease both;
 }
 
 .home-kicker {
@@ -92,6 +104,16 @@ a {
   border-radius: 8px;
   padding: 10px;
   background: #fbfcfc;
+  transition: transform 180ms ease, border-color 180ms ease;
+}
+
+.home-steps div:hover,
+.metric:hover,
+.panel:hover,
+.setup-panel:hover,
+.auth-panel:hover {
+  transform: translateY(-2px);
+  border-color: #bfd5ce;
 }
 
 .home-steps strong {
@@ -184,6 +206,78 @@ h2 {
   border-radius: 8px;
   padding: 16px;
   margin-bottom: 16px;
+  animation: fadeUp 560ms ease both;
+}
+
+.auth-panel,
+.locked-panel {
+  background: #ffffff;
+  border: 1px solid #dce3e7;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+  animation: fadeUp 560ms ease both;
+}
+
+.auth-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(320px, 0.55fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.auth-copy p:not(.section-kicker),
+.locked-panel p {
+  color: #607077;
+  line-height: 1.8;
+}
+
+.auth-form {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #e0e6e9;
+  border-radius: 8px;
+  padding: 12px;
+  background: #fbfcfc;
+}
+
+.auth-form label {
+  display: grid;
+  gap: 6px;
+  color: #445158;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.auth-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.auth-tabs button {
+  border: 1px solid #cfd8dc;
+  background: #ffffff;
+  border-radius: 8px;
+  min-height: 38px;
+  font-weight: 800;
+}
+
+.auth-tabs button.active {
+  background: #1f6f61;
+  border-color: #1f6f61;
+  color: #ffffff;
+}
+
+.auth-message {
+  margin: 0;
+  color: #1f6f61;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.locked-panel {
+  text-align: center;
 }
 
 .setup-heading {
@@ -252,6 +346,7 @@ h2 {
   grid-template-rows: auto auto;
   column-gap: 10px;
   min-height: 86px;
+  transition: transform 180ms ease, border-color 180ms ease;
 }
 
 .metric-icon {
@@ -295,6 +390,7 @@ h2 {
   border-radius: 8px;
   padding: 16px;
   min-width: 0;
+  transition: transform 180ms ease, border-color 180ms ease;
 }
 
 .panel-head {
@@ -598,6 +694,7 @@ textarea {
 
 @media (max-width: 1100px) {
   .home-panel,
+  .auth-panel,
   .workflow,
   .grades-layout {
     grid-template-columns: 1fr;
