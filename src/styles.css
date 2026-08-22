@@ -93,7 +93,9 @@ a {
   background: rgba(255, 255, 255, 0.84);
 }
 
-.main-nav a {
+.main-nav button {
+  border: 0;
+  background: transparent;
   color: #4b5960;
   font-weight: 800;
   font-size: 13px;
@@ -102,7 +104,8 @@ a {
   transition: background 180ms ease, color 180ms ease;
 }
 
-.main-nav a:hover {
+.main-nav button:hover,
+.main-nav button.active {
   background: #e8f3ee;
   color: #1f6f61;
 }
@@ -165,6 +168,10 @@ a {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.home-actions.center {
+  justify-content: center;
 }
 
 .hero-dashboard {
@@ -375,6 +382,46 @@ h2 {
   padding: 16px;
   margin-bottom: 16px;
   animation: fadeUp 560ms ease both;
+}
+
+.storage-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: #17202a;
+  color: #ffffff;
+  border: 1px solid #17202a;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+  animation: fadeUp 540ms ease both;
+}
+
+.storage-panel h2 {
+  color: #ffffff;
+}
+
+.storage-panel span,
+.storage-panel strong {
+  display: block;
+  color: #dbe7e3;
+  font-size: 14px;
+  margin-top: 4px;
+}
+
+.storage-panel strong {
+  color: #9be0ca;
+}
+
+.storage-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.storage-actions .button {
+  border-color: rgba(255, 255, 255, 0.28);
 }
 
 .auth-panel,
@@ -910,8 +957,13 @@ textarea {
   }
 
   .top-actions,
-  .assessment-form {
+  .assessment-form,
+  .storage-actions {
     grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .storage-panel {
     display: grid;
   }
 

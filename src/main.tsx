@@ -4,6 +4,7 @@ import {
   BarChart3,
   CheckCircle2,
   ClipboardList,
+  Database,
   Download,
   FileUp,
   GraduationCap,
@@ -11,6 +12,7 @@ import {
   LogIn,
   LogOut,
   Plus,
+  RefreshCw,
   RotateCcw,
   Save,
   Search,
@@ -82,7 +84,10 @@ type AuthUser = {
   createdAt: string;
 };
 
-const STORAGE_KEY = "shared-course-grades-v3";
+type AppPage = "home" | "register" | "login" | "app";
+
+const LEGACY_STORAGE_KEY = "shared-course-grades-v3";
+const WORKSPACE_PREFIX = "shared-course-workspace-v1:";
 const AUTH_USERS_KEY = "shared-course-auth-users-v1";
 const AUTH_SESSION_KEY = "shared-course-auth-session-v1";
 
@@ -102,14 +107,29 @@ const starterState: AppState = {
   grades: []
 };
 
-function readState(): AppState {
-  const raw = localStorage.getItem(STORAGE_KEY);
+function workspaceKey(userId: string) {
+  return `${WORKSPACE_PREFIX}${userId}`;
+}
+
+function readStateFromStorage(key: string): AppState {
+  const raw = localStorage.getItem(key);
   if (!raw) return starterState;
   try {
     return { ...starterState, ...(JSON.parse(raw) as AppState) };
   } catch {
     return starterState;
   }
+}
+
+function readWorkspace(userId: string): AppState {
+  const saved = localStorage.getItem(workspaceKey(userId));
+  if (saved) return readStateFromStorage(workspaceKey(userId));
+  const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+  return legacy ? readStateFromStorage(LEGACY_STORAGE_KEY) : starterState;
+}
+
+function saveWorkspace(userId: string, appState: AppState) {
+  localStorage.setItem(workspaceKey(userId), JSON.stringify(appState));
 }
 
 function readAuthUsers(): AuthUser[] {
@@ -124,6 +144,26 @@ function readAuthUsers(): AuthUser[] {
 
 function readCurrentUserId() {
   return localStorage.getItem(AUTH_SESSION_KEY);
+}
+
+function readInitialPage(): AppPage {
+  const pathname = window.location.pathname.replace(/\/+$/, "");
+  if (pathname === "/register") return "register";
+  if (pathname === "/login") return "login";
+  if (pathname === "/app") return "app";
+  return "home";
+}
+
+function pagePath(page: AppPage) {
+  return page === "home" ? "/" : `/${page}`;
+}
+
+function formatSavedAt(value: string) {
+  if (!value) return "لم يتم الحفظ بعد";
+  return new Intl.DateTimeFormat("ar-SA", {
+    dateStyle: "medium",
+    timeStyle: "short"
+  }).format(new Date(value));
 }
 
 function normalizeKey(key: string) {
@@ -194,12 +234,18 @@ function kindLabel(kind: AssessmentKind) {
 }
 
 function App() {
-  const [state, setState] = useState<AppState>(readState);
+  const initialUserId = readCurrentUserId();
+  const [state, setState] = useState<AppState>(() => (initialUserId ? readWorkspace(initialUserId) : starterState));
   const [authUsers, setAuthUsers] = useState<AuthUser[]>(readAuthUsers);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(readCurrentUserId);
-  const [authMode, setAuthMode] = useState<"register" | "login">("register");
+  const [currentUserId, setCurrentUserId] = useState<string | null>(initialUserId);
+  const [page, setPage] = useState<AppPage>(readInitialPage);
+  const [authMode, setAuthMode] = useState<"register" | "login">(
+    readInitialPage() === "login" ? "login" : "register"
+  );
   const [authDraft, setAuthDraft] = useState({ fullName: "", email: "", password: "" });
   const [authMessage, setAuthMessage] = useState("");
+  const [storageMessage, setStorageMessage] = useState("");
+  const [lastSavedAt, setLastSavedAt] = useState("");
   const [query, setQuery] = useState("");
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [manualNames, setManualNames] = useState("");
@@ -212,8 +258,10 @@ function App() {
   });
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  }, [state]);
+    if (!currentUserId) return;
+    saveWorkspace(currentUserId, state);
+    setLastSavedAt(new Date().toISOString());
+  }, [currentUserId, state]);
 
   useEffect(() => {
     localStorage.setItem(AUTH_USERS_KEY, JSON.stringify(authUsers));
@@ -230,6 +278,23 @@ function App() {
   useEffect(() => {
     setAssessmentDraft((draft) => ({ ...draft, kind: state.course.kind }));
   }, [state.course.kind]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const nextPage = readInitialPage();
+      setPage(nextPage);
+      if (nextPage === "login" || nextPage === "register") setAuthMode(nextPage);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  function goTo(nextPage: AppPage) {
+    setPage(nextPage);
+    if (nextPage === "login" || nextPage === "register") setAuthMode(nextPage);
+    window.history.pushState(null, "", pagePath(nextPage));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
   const filteredTrainees = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -291,13 +356,17 @@ function App() {
       return;
     }
     const user = { id: crypto.randomUUID(), fullName, email, password, createdAt: new Date().toISOString() };
+    const nextState = {
+      ...starterState,
+      trainer: { ...starterState.trainer, name: fullName }
+    };
     setAuthUsers((users) => [...users, user]);
+    saveWorkspace(user.id, nextState);
+    setState(nextState);
     setCurrentUserId(user.id);
     setAuthMessage("تم إنشاء الحساب وتسجيل الدخول.");
-    setState((current) => ({
-      ...current,
-      trainer: { ...current.trainer, name: current.trainer.name || fullName }
-    }));
+    setStorageMessage("تم إنشاء مساحة بيانات جديدة لهذا الحساب.");
+    goTo("app");
   }
 
   function loginUser() {
@@ -308,14 +377,34 @@ function App() {
       setAuthMessage("بيانات الدخول غير صحيحة.");
       return;
     }
+    setState(readWorkspace(user.id));
     setCurrentUserId(user.id);
     setAuthDraft((draft) => ({ ...draft, fullName: user.fullName }));
     setAuthMessage("تم تسجيل الدخول.");
+    setStorageMessage("تم استدعاء بيانات الحساب المحفوظة.");
+    goTo("app");
   }
 
   function logoutUser() {
+    if (currentUserId) saveWorkspace(currentUserId, state);
     setCurrentUserId(null);
+    setState(starterState);
     setAuthMessage("تم تسجيل الخروج.");
+    setStorageMessage("");
+    goTo("login");
+  }
+
+  function saveNow() {
+    if (!currentUserId) return;
+    saveWorkspace(currentUserId, state);
+    setLastSavedAt(new Date().toISOString());
+    setStorageMessage("تم حفظ البيانات الحالية.");
+  }
+
+  function restoreWorkspace() {
+    if (!currentUserId) return;
+    setState(readWorkspace(currentUserId));
+    setStorageMessage("تم استدعاء آخر نسخة محفوظة لهذا الحساب.");
   }
 
   async function importTrainees(event: ChangeEvent<HTMLInputElement>) {
@@ -458,11 +547,16 @@ function App() {
   function resetAll() {
     const confirmed = window.confirm("سيتم حذف البيانات الحالية من هذا المتصفح. هل تريد المتابعة؟");
     if (confirmed) {
-      localStorage.removeItem(STORAGE_KEY);
+      if (currentUserId) {
+        localStorage.removeItem(workspaceKey(currentUserId));
+      } else {
+        localStorage.removeItem(LEGACY_STORAGE_KEY);
+      }
       setState(starterState);
       setActiveCardId(null);
       setManualNames("");
       setImportMessage("");
+      setStorageMessage("تم حذف بيانات مساحة العمل الحالية.");
     }
   }
 
@@ -479,10 +573,18 @@ function App() {
           </div>
         </div>
         <nav className="main-nav" aria-label="روابط الصفحة">
-          <a href="#home">الرئيسية</a>
-          <a href="#auth">التسجيل</a>
-          <a href="#onboarding">إعداد المقرر</a>
-          <a href="#grades">الدرجات</a>
+          <button className={page === "home" ? "active" : ""} onClick={() => goTo("home")}>
+            الرئيسية
+          </button>
+          <button className={page === "register" ? "active" : ""} onClick={() => goTo("register")}>
+            التسجيل
+          </button>
+          <button className={page === "login" ? "active" : ""} onClick={() => goTo("login")}>
+            الدخول
+          </button>
+          <button className={page === "app" ? "active" : ""} onClick={() => goTo(currentUser ? "app" : "login")}>
+            لوحة الدرجات
+          </button>
         </nav>
         <div className="top-actions">
           {currentUser && <span className="session-chip">مرحبًا، {currentUser.fullName}</span>}
@@ -493,14 +595,26 @@ function App() {
             </button>
           ) : (
             <>
-              <a className="button" href="#auth" onClick={() => setAuthMode("login")}>
+              <button className="button" onClick={() => goTo("login")}>
                 <LogIn size={18} />
                 دخول
-              </a>
-              <a className="button primary" href="#auth" onClick={() => setAuthMode("register")}>
+              </button>
+              <button className="button primary" onClick={() => goTo("register")}>
                 <UserPlus size={18} />
                 حساب جديد
-              </a>
+              </button>
+            </>
+          )}
+          {currentUser && (
+            <>
+              <button className="button" onClick={saveNow}>
+                <Save size={18} />
+                حفظ
+              </button>
+              <button className="button" onClick={restoreWorkspace}>
+                <RefreshCw size={18} />
+                استدعاء
+              </button>
             </>
           )}
           <button className="button" onClick={exportWorkbook} disabled={!currentUser || !state.trainees.length}>
@@ -513,7 +627,7 @@ function App() {
         </div>
       </header>
 
-      <section className="home-panel" id="home">
+      {page === "home" && <section className="home-panel" id="home">
         <div className="home-copy">
           <span className="home-kicker">منصة درجات المقرر المشترك</span>
           <h2>صفحة واحدة لتجهيز المقرر، توزيع الشعب، ورصد الدرجات بسرعة</h2>
@@ -539,12 +653,12 @@ function App() {
             </span>
           </div>
           <div className="home-actions">
-            <a className="button primary" href={currentUser ? "#onboarding" : "#auth"} onClick={() => setAuthMode("register")}>
+            <button className="button primary" onClick={() => goTo(currentUser ? "app" : "register")}>
               ابدأ الإعداد
-            </a>
-            <a className="button" href={currentUser ? "#grades" : "#auth"} onClick={() => setAuthMode("login")}>
-              تسجيل الدخول
-            </a>
+            </button>
+            <button className="button" onClick={() => goTo(currentUser ? "app" : "login")}>
+              {currentUser ? "فتح لوحة الدرجات" : "تسجيل الدخول"}
+            </button>
           </div>
         </div>
         <div className="hero-dashboard" aria-label="معاينة سير العمل">
@@ -587,9 +701,9 @@ function App() {
             </div>
           </div>
         </div>
-      </section>
+      </section>}
 
-      {!currentUser && (
+      {!currentUser && (page === "register" || page === "login") && (
         <AuthPanel
           mode={authMode}
           draft={authDraft}
@@ -601,8 +715,26 @@ function App() {
         />
       )}
 
-      {currentUser ? (
+      {currentUser && page === "app" ? (
         <>
+      <section className="storage-panel" aria-label="حفظ واستدعاء البيانات">
+        <div>
+          <p className="section-kicker">حفظ واستدعاء</p>
+          <h2>بيانات هذا الحساب محفوظة محليًا وقابلة للاستدعاء</h2>
+          <span>آخر حفظ: {formatSavedAt(lastSavedAt || state.course.savedAt)}</span>
+          {storageMessage && <strong>{storageMessage}</strong>}
+        </div>
+        <div className="storage-actions">
+          <button className="button primary" onClick={saveNow}>
+            <Database size={18} />
+            حفظ البيانات
+          </button>
+          <button className="button" onClick={restoreWorkspace}>
+            <RefreshCw size={18} />
+            استدعاء آخر حفظ
+          </button>
+        </div>
+      </section>
       <section className="setup-panel" id="onboarding">
         <div className="setup-heading">
           <div>
@@ -936,13 +1068,21 @@ function App() {
         </div>
       </section>
         </>
-      ) : (
+      ) : page === "app" ? (
         <section className="locked-panel">
           <IdCard size={32} />
           <h2>سجل الدخول للمتابعة</h2>
           <p>بعد إنشاء الحساب أو تسجيل الدخول ستظهر لك خطوات إنشاء المقرر، إضافة المتدربين، ورصد الدرجات.</p>
+          <div className="home-actions center">
+            <button className="button primary" onClick={() => goTo("login")}>
+              تسجيل الدخول
+            </button>
+            <button className="button" onClick={() => goTo("register")}>
+              إنشاء حساب
+            </button>
+          </div>
         </section>
-      )}
+      ) : null}
     </main>
   );
 }
