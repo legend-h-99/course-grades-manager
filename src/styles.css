@@ -23,6 +23,10 @@ button {
   cursor: pointer;
 }
 
+a {
+  text-decoration: none;
+}
+
 .app-shell {
   width: min(1480px, calc(100% - 32px));
   margin: 0 auto;
@@ -65,7 +69,13 @@ button {
   max-width: 760px;
   color: #526168;
   line-height: 1.8;
-  margin-bottom: 0;
+  margin-bottom: 16px;
+}
+
+.home-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .home-steps {
@@ -188,6 +198,13 @@ h2 {
 .helper-text {
   color: #607077;
   font-size: 14px;
+}
+
+.section-kicker {
+  margin: 0 0 4px;
+  color: #1f6f61;
+  font-size: 13px;
+  font-weight: 900;
 }
 
 .status-badge {

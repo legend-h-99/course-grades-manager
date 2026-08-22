@@ -398,31 +398,36 @@ function App() {
 
       <section className="home-panel">
         <div className="home-copy">
-          <span className="home-kicker">الصفحة الرئيسية</span>
-          <h2>مساحة واحدة للمدرب والشعبة والمتدربين والدرجات</h2>
+          <span className="home-kicker">منصة درجات المقرر المشترك</span>
+          <h2>ابدأ بإعداد الكلية والمقرر، ثم أدر المتدربين والدرجات من مكان واحد</h2>
           <p>
-            أنشئ حساب المقرر، أضف الشعب والمتدربين، ثم استعلم عن أي متدرب بالاسم أو الرقم التدريبي واعرض درجاته كاملة.
+            صفحة عملية للمدربين تساعدك على إنشاء حساب المقرر، إضافة الشعب النظرية والعملية، استيراد المتدربين، رصد الدرجات، والاستعلام عن بطاقة أي متدرب بسرعة.
           </p>
+          <div className="home-actions">
+            <a className="button primary" href="#onboarding">ابدأ الإعداد</a>
+            <a className="button" href="#grades">الانتقال للدرجات</a>
+          </div>
         </div>
         <div className="home-steps" aria-label="خطوات استخدام النظام">
           <div>
             <strong>1</strong>
-            <span>إنشاء حساب المقرر</span>
+            <span>سجل الكلية والقسم والمدرب</span>
           </div>
           <div>
             <strong>2</strong>
-            <span>إضافة أو استيراد المتدربين</span>
+            <span>أنشئ المقرر والشعبة</span>
           </div>
           <div>
             <strong>3</strong>
-            <span>رصد الدرجات والاستعلام</span>
+            <span>أضف المتدربين وارصد الدرجات</span>
           </div>
         </div>
       </section>
 
-      <section className="setup-panel">
+      <section className="setup-panel" id="onboarding">
         <div className="setup-heading">
           <div>
+            <p className="section-kicker">Onboarding</p>
             <h2>إنشاء حساب المقرر</h2>
             <span>أدخل بيانات الكلية والقسم، ثم اسم المدرب والمقرر لإنشاء مساحة العمل.</span>
           </div>
@@ -671,7 +676,7 @@ function App() {
         </div>
       </section>
 
-      <section className="panel">
+      <section className="panel" id="grades">
         <div className="panel-head horizontal">
           <div>
             <h2>3. رصد الدرجات والاستعلام</h2>

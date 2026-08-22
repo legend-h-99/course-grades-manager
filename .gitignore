@@ -3,4 +3,5 @@ dist
 .DS_Store
 .wrangler
 .playwright-mcp
+work
 npm-debug.log*
