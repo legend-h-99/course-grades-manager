@@ -1,6 +1,8 @@
 import React, { ChangeEvent, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
+  BarChart3,
+  CheckCircle2,
   ClipboardList,
   Download,
   FileUp,
@@ -12,6 +14,7 @@ import {
   RotateCcw,
   Save,
   Search,
+  ShieldCheck,
   UserPlus,
   Users
 } from "lucide-react";
@@ -466,11 +469,23 @@ function App() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <div>
-          <p className="eyebrow">مقرر مشترك</p>
-          <h1>نظام إدارة درجات المقرر</h1>
+        <div className="brand-block">
+          <span className="brand-mark">
+            <GraduationCap size={22} />
+          </span>
+          <div>
+            <p className="eyebrow">مقرر مشترك</p>
+            <h1>نظام إدارة درجات المقرر</h1>
+          </div>
         </div>
+        <nav className="main-nav" aria-label="روابط الصفحة">
+          <a href="#home">الرئيسية</a>
+          <a href="#auth">التسجيل</a>
+          <a href="#onboarding">إعداد المقرر</a>
+          <a href="#grades">الدرجات</a>
+        </nav>
         <div className="top-actions">
+          {currentUser && <span className="session-chip">مرحبًا، {currentUser.fullName}</span>}
           {currentUser ? (
             <button className="button" onClick={logoutUser}>
               <LogOut size={18} />
@@ -498,13 +513,31 @@ function App() {
         </div>
       </header>
 
-      <section className="home-panel">
+      <section className="home-panel" id="home">
         <div className="home-copy">
           <span className="home-kicker">منصة درجات المقرر المشترك</span>
-          <h2>ابدأ بإعداد الكلية والمقرر، ثم أدر المتدربين والدرجات من مكان واحد</h2>
+          <h2>صفحة واحدة لتجهيز المقرر، توزيع الشعب، ورصد الدرجات بسرعة</h2>
           <p>
             صفحة عملية للمدربين تساعدك على إنشاء حساب المقرر، إضافة الشعب النظرية والعملية، استيراد المتدربين، رصد الدرجات، والاستعلام عن بطاقة أي متدرب بسرعة.
           </p>
+          <div className="feature-strip" aria-label="خصائص النظام">
+            <span>
+              <ShieldCheck size={16} />
+              تسجيل ودخول
+            </span>
+            <span>
+              <FileUp size={16} />
+              استيراد Excel وCSV
+            </span>
+            <span>
+              <IdCard size={16} />
+              بطاقة متدرب
+            </span>
+            <span>
+              <Download size={16} />
+              تصدير الدرجات
+            </span>
+          </div>
           <div className="home-actions">
             <a className="button primary" href={currentUser ? "#onboarding" : "#auth"} onClick={() => setAuthMode("register")}>
               ابدأ الإعداد
@@ -514,18 +547,44 @@ function App() {
             </a>
           </div>
         </div>
-        <div className="home-steps" aria-label="خطوات استخدام النظام">
-          <div>
-            <strong>1</strong>
-            <span>سجل الكلية والقسم والمدرب</span>
+        <div className="hero-dashboard" aria-label="معاينة سير العمل">
+          <div className="hero-card hero-card-main">
+            <div>
+              <span>جاهزية البيانات</span>
+              <strong>{setupReady ? "مكتمل" : "بانتظار الإعداد"}</strong>
+            </div>
+            <CheckCircle2 size={24} />
           </div>
-          <div>
-            <strong>2</strong>
-            <span>أنشئ المقرر والشعبة</span>
+          <div className="hero-mini-grid">
+            <div>
+              <Users size={18} />
+              <span>{state.trainees.length}</span>
+              <small>متدرب</small>
+            </div>
+            <div>
+              <ClipboardList size={18} />
+              <span>{state.assessments.length}</span>
+              <small>اختبار</small>
+            </div>
+            <div>
+              <BarChart3 size={18} />
+              <span>{average.toFixed(1)}</span>
+              <small>متوسط</small>
+            </div>
           </div>
-          <div>
-            <strong>3</strong>
-            <span>أضف المتدربين وارصد الدرجات</span>
+          <div className="home-steps" aria-label="خطوات استخدام النظام">
+            <div>
+              <strong>1</strong>
+              <span>سجل الكلية والقسم والمدرب</span>
+            </div>
+            <div>
+              <strong>2</strong>
+              <span>أنشئ المقرر والشعبة</span>
+            </div>
+            <div>
+              <strong>3</strong>
+              <span>أضف المتدربين وارصد الدرجات</span>
+            </div>
           </div>
         </div>
       </section>
