@@ -1348,7 +1348,7 @@ textarea {
   }
 
   .top-actions .session-chip,
-  .top-actions .button:nth-last-child(2) {
+  .top-actions .btn-export {
     grid-column: 1 / -1;
   }
 
@@ -1500,7 +1500,7 @@ textarea {
   }
 
   .top-actions .session-chip,
-  .top-actions .button:nth-last-child(2) {
+  .top-actions .btn-export {
     grid-column: auto;
   }
 

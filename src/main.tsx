@@ -690,13 +690,17 @@ function App() {
               )}
             </div>
           )}
-          <button className="button" onClick={exportWorkbook} disabled={!currentUser || !state.trainees.length}>
-            <Download size={18} />
-            تصدير Excel
-          </button>
-          <button className="icon-button" onClick={resetAll} title="إعادة ضبط البيانات" aria-label="إعادة ضبط البيانات">
-            <RotateCcw size={18} />
-          </button>
+          {currentUser && (
+            <>
+              <button className="button btn-export" onClick={exportWorkbook} disabled={!state.trainees.length}>
+                <Download size={18} />
+                تصدير Excel
+              </button>
+              <button className="icon-button" onClick={resetAll} title="إعادة ضبط البيانات" aria-label="إعادة ضبط البيانات">
+                <RotateCcw size={18} />
+              </button>
+            </>
+          )}
         </div>
       </header>
 
