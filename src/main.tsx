@@ -102,6 +102,7 @@ function App() {
   const [query, setQuery] = useState("");
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [manualNames, setManualNames] = useState("");
+  const [isTraineeSheetOpen, setIsTraineeSheetOpen] = useState(false);
   const [importMessage, setImportMessage] = useState("");
   const [assessmentDraft, setAssessmentDraft] = useState({
     name: "",
@@ -405,6 +406,7 @@ function App() {
 
     setState((current) => ({ ...current, trainees: [...current.trainees, ...trainees] }));
     setManualNames("");
+    setIsTraineeSheetOpen(false);
     setActiveCardId(trainees[0].id);
   }
 
@@ -916,14 +918,19 @@ function App() {
           </div>
           <div className="names-tools">
             <textarea
+              className="desktop-manual-entry"
               value={manualNames}
               placeholder={"اكتب كل متدرب في سطر مستقل\nمثال: 4455، محمد عبدالله\nأو: محمد عبدالله"}
               onChange={(event) => setManualNames(event.target.value)}
             />
             <div className="names-actions">
-              <button className="button primary" onClick={addManualNames} disabled={!manualNames.trim()}>
+              <button className="button primary desktop-manual-entry" onClick={addManualNames} disabled={!manualNames.trim()}>
                 <Plus size={18} />
                 إضافة الأسماء
+              </button>
+              <button className="button primary mobile-add-trigger" onClick={() => setIsTraineeSheetOpen(true)}>
+                <Plus size={18} />
+                إضافة متدربين
               </button>
               <label className="button">
                 <FileUp size={18} />
@@ -933,6 +940,32 @@ function App() {
               {importMessage && <p className="helper-text">{importMessage}</p>}
             </div>
           </div>
+          {isTraineeSheetOpen && (
+            <div className="trainee-sheet-backdrop" role="presentation">
+              <section className="trainee-sheet" role="dialog" aria-modal="true" aria-labelledby="trainee-sheet-title">
+                <span className="sheet-handle" aria-hidden="true" />
+                <div className="sheet-head">
+                  <h2 id="trainee-sheet-title">إضافة متدربين</h2>
+                  <p>أدخل رقم التدريب والاسم، كل متدرب في سطر</p>
+                </div>
+                <textarea
+                  className="sheet-textarea"
+                  value={manualNames}
+                  placeholder={"1001، محمد عبدالله\n1002، سارة أحمد\n1003، خالد محمد"}
+                  autoFocus
+                  onChange={(event) => setManualNames(event.target.value)}
+                />
+                <div className="sheet-actions">
+                  <button className="button sheet-cancel" onClick={() => setIsTraineeSheetOpen(false)}>
+                    إلغاء
+                  </button>
+                  <button className="button primary sheet-submit" onClick={addManualNames} disabled={!manualNames.trim()}>
+                    إضافة الأسماء
+                  </button>
+                </div>
+              </section>
+            </div>
+          )}
           <div className="table-wrap compact">
             <table>
               <thead>
