@@ -617,9 +617,6 @@ function App() {
           <button type="button" className={page === "home" ? "active" : ""} onClick={() => goTo("home")}>
             الرئيسية
           </button>
-          <button type="button" className={page === "register" ? "active" : ""} onClick={() => goTo("register")}>
-            التسجيل
-          </button>
           <button type="button" className={page === "login" ? "active" : ""} onClick={() => goTo("login")}>
             الدخول
           </button>
@@ -704,81 +701,65 @@ function App() {
         </div>
       </header>
 
-      {page === "home" && <section className="home-panel" id="home">
-        <div className="home-copy">
-          <span className="home-kicker">منصة درجات المقرر المشترك</span>
-          <h2>صفحة واحدة لتجهيز المقرر، توزيع الشعب، ورصد الدرجات بسرعة</h2>
-          <p>
-            صفحة عملية للمدربين تساعدك على إنشاء حساب المقرر، إضافة الشعب النظرية والعملية، استيراد المتدربين، رصد الدرجات، والاستعلام عن بطاقة أي متدرب بسرعة.
-          </p>
-          <div className="feature-strip" aria-label="خصائص النظام">
-            <span>
-              <ShieldCheck size={16} />
-              تسجيل ودخول
-            </span>
-            <span>
-              <FileUp size={16} />
-              استيراد Excel وCSV
-            </span>
-            <span>
-              <IdCard size={16} />
-              بطاقة متدرب
-            </span>
-            <span>
-              <Download size={16} />
-              تصدير الدرجات
-            </span>
-          </div>
-          <div className="home-actions">
-            <button className="button primary" onClick={() => goTo(currentUser ? "app" : "register")}>
-              ابدأ الإعداد
-            </button>
-            <button className="button" onClick={() => goTo(currentUser ? "app" : "login")}>
-              {currentUser ? "فتح لوحة الدرجات" : "تسجيل الدخول"}
-            </button>
-          </div>
-        </div>
-        <div className="hero-dashboard" aria-label="معاينة سير العمل">
-          <div className="hero-card hero-card-main">
-            <div>
-              <span>جاهزية البيانات</span>
-              <strong>{setupReady ? "مكتمل" : "بانتظار الإعداد"}</strong>
-            </div>
-            <CheckCircle2 size={24} />
-          </div>
-          <div className="hero-mini-grid">
-            <div>
-              <Users size={18} />
-              <span>{state.trainees.length}</span>
-              <small>متدرب</small>
-            </div>
-            <div>
-              <ClipboardList size={18} />
-              <span>{state.assessments.length}</span>
-              <small>اختبار</small>
-            </div>
-            <div>
-              <BarChart3 size={18} />
-              <span>{average.toFixed(1)}</span>
-              <small>متوسط</small>
+      {page === "home" && (
+        <section className="landing-section" id="home">
+          <div className="landing-hero">
+            <p className="landing-eyebrow">منصة درجات المقرر المشترك</p>
+            <h2>صفحة واحدة لإدارة درجات مقررك</h2>
+            <p className="landing-lead">
+              أداة عملية للمدربين لإنشاء حساب المقرر، استيراد المتدربين، رصد الدرجات النظرية والعملية، وتصدير النتائج بسرعة.
+            </p>
+            <div className="landing-cta">
+              {currentUser ? (
+                <button className="button primary" onClick={() => goTo("app")}>
+                  فتح لوحة الدرجات
+                </button>
+              ) : (
+                <>
+                  <button className="button primary" onClick={() => goTo("login")}>
+                    <LogIn size={18} />
+                    دخول
+                  </button>
+                  <button className="button" onClick={() => goTo("register")}>
+                    <UserPlus size={18} />
+                    إنشاء حساب
+                  </button>
+                </>
+              )}
             </div>
           </div>
-          <div className="home-steps" aria-label="خطوات استخدام النظام">
-            <div>
-              <strong>1</strong>
-              <span>سجل الكلية والقسم والمدرب</span>
+          <div className="landing-features">
+            <div className="landing-feature-card">
+              <div className="metric-icon">
+                <Users size={22} />
+              </div>
+              <h3>إدارة المتدربين</h3>
+              <p>استورد قوائم المتدربين من Excel أو CSV</p>
             </div>
-            <div>
-              <strong>2</strong>
-              <span>أنشئ المقرر والشعبة</span>
+            <div className="landing-feature-card">
+              <div className="metric-icon">
+                <BarChart3 size={22} />
+              </div>
+              <h3>رصد الدرجات</h3>
+              <p>رصد النظري والعملي مع حساب المجموع تلقائيًا</p>
             </div>
-            <div>
-              <strong>3</strong>
-              <span>أضف المتدربين وارصد الدرجات</span>
+            <div className="landing-feature-card">
+              <div className="metric-icon">
+                <Download size={22} />
+              </div>
+              <h3>تصدير Excel</h3>
+              <p>تصدير الدرجات بتنسيق Excel جاهز للرفع</p>
+            </div>
+            <div className="landing-feature-card">
+              <div className="metric-icon">
+                <ShieldCheck size={22} />
+              </div>
+              <h3>حفظ سحابي</h3>
+              <p>بياناتك محفوظة على السحابة وآمنة في أي وقت</p>
             </div>
           </div>
-        </div>
-      </section>}
+        </section>
+      )}
 
       {!currentUser && (page === "register" || page === "login") && (
         <AuthPanel
@@ -878,15 +859,14 @@ function App() {
           )}
         </div>
       </section>
-      <section className="setup-panel" id="onboarding">
-        <div className="setup-heading">
+      <section className="panel settings-panel" id="onboarding">
+        <div className="panel-head horizontal">
           <div>
-            <p className="section-kicker">البدء</p>
-            <h2>إنشاء حساب المقرر</h2>
-            <span>أدخل بيانات الكلية والقسم، ثم اسم المدرب والمقرر لإنشاء مساحة العمل.</span>
+            <p className="section-kicker">إعدادات المقرر</p>
+            <h2>بيانات الكلية والمقرر</h2>
           </div>
           <span className={`status-badge ${state.course.savedAt ? "saved" : ""}`}>
-            {state.course.savedAt ? "تم إنشاء الحساب" : "حساب جديد"}
+            {state.course.savedAt ? "تم الحفظ" : "حساب جديد"}
           </span>
         </div>
         <div className="setup-grid">
