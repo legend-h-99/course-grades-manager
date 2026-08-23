@@ -1297,6 +1297,10 @@ textarea {
     display: none;
   }
 
+  .app-shell.is-guest .main-nav {
+    display: none;
+  }
+
   .panel-head.horizontal,
   .setup-heading {
     display: grid;
