@@ -100,6 +100,10 @@ function App() {
   const [courseLookupMessage, setCourseLookupMessage] = useState("");
   const [courseLookup, setCourseLookup] = useState<CoursePreview | null>(null);
   const [query, setQuery] = useState("");
+  const [exportSectionKind, setExportSectionKind] = useState<"all" | AssessmentKind>("all");
+  const [exportSectionNumber, setExportSectionNumber] = useState("");
+  const [manageSectionKind, setManageSectionKind] = useState<"all" | AssessmentKind>("all");
+  const [manageSectionNumber, setManageSectionNumber] = useState("");
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [manualNames, setManualNames] = useState("");
   const [isTraineeSheetOpen, setIsTraineeSheetOpen] = useState(false);
@@ -208,6 +212,54 @@ function App() {
           : [],
     [state.trainers, currentUser, state.trainer]
   );
+
+  const exportSectionOptions = useMemo(() => {
+    if (exportSectionKind === "all") return [];
+    const sections = state.trainees
+      .map((trainee) =>
+        exportSectionKind === "theory" ? trainee.theorySection : trainee.practicalSection
+      )
+      .map((section) => section.trim())
+      .filter(Boolean);
+    return Array.from(new Set(sections)).sort((a, b) => a.localeCompare(b, "ar"));
+  }, [exportSectionKind, state.trainees]);
+
+  useEffect(() => {
+    if (exportSectionKind === "all") {
+      setExportSectionNumber("");
+      return;
+    }
+    if (exportSectionNumber && !exportSectionOptions.includes(exportSectionNumber)) {
+      setExportSectionNumber("");
+    }
+  }, [exportSectionKind, exportSectionNumber, exportSectionOptions]);
+
+  const manageSectionOptions = useMemo(() => {
+    if (manageSectionKind === "all") return [];
+    const sections = state.trainees
+      .map((trainee) =>
+        manageSectionKind === "theory" ? trainee.theorySection : trainee.practicalSection
+      )
+      .map((section) => section.trim())
+      .filter(Boolean);
+    return Array.from(new Set(sections)).sort((a, b) => a.localeCompare(b, "ar"));
+  }, [manageSectionKind, state.trainees]);
+
+  useEffect(() => {
+    if (manageSectionKind === "all") {
+      setManageSectionNumber("");
+    }
+  }, [manageSectionKind]);
+
+  const managedTrainees = useMemo(() => {
+    if (manageSectionKind === "all" || !manageSectionNumber.trim()) return state.trainees;
+    const selectedSection = manageSectionNumber.trim();
+    return state.trainees.filter((trainee) => {
+      const traineeSection =
+        manageSectionKind === "theory" ? trainee.theorySection : trainee.practicalSection;
+      return traineeSection.trim() === selectedSection;
+    });
+  }, [manageSectionKind, manageSectionNumber, state.trainees]);
 
   const setupReady = useMemo(
     () =>
@@ -401,7 +453,13 @@ function App() {
         if (parts.length >= 2) return { "الرقم التدريبي": parts[0], "اسم المتدرب": parts.slice(1).join(" ") };
         return { "الرقم التدريبي": String(state.trainees.length + index + 1), "اسم المتدرب": parts[0] };
       });
-    const trainees = mapRowsToTrainees(rows, state.course);
+    const trainees = mapRowsToTrainees(rows, state.course).map((trainee) => {
+      if (manageSectionKind === "all" || !manageSectionNumber.trim()) return trainee;
+      const sectionNumber = manageSectionNumber.trim();
+      return manageSectionKind === "theory"
+        ? { ...trainee, theorySection: sectionNumber }
+        : { ...trainee, practicalSection: sectionNumber };
+    });
     if (!trainees.length) return;
 
     setState((current) => ({ ...current, trainees: [...current.trainees, ...trainees] }));
@@ -461,6 +519,14 @@ function App() {
   }
 
   async function exportWorkbook() {
+    const traineesForExport = state.trainees.filter((trainee) => {
+      if (exportSectionKind === "all" || !exportSectionNumber) return true;
+      const traineeSection =
+        exportSectionKind === "theory" ? trainee.theorySection : trainee.practicalSection;
+      return traineeSection.trim() === exportSectionNumber;
+    });
+    if (!traineesForExport.length) return;
+
     const headers = [
       "اسم الكلية",
       "القسم",
@@ -481,7 +547,7 @@ function App() {
       "المجموع الكامل",
       ...state.assessments.map((assessment) => assessment.name)
     ];
-    const rows = state.trainees.map((trainee) => {
+    const rows = traineesForExport.map((trainee) => {
       const totals = getTraineeTotals(trainee.id, state.assessments, state.grades);
       return [
         state.account.collegeName,
@@ -508,7 +574,11 @@ function App() {
       headers.map((value) => ({ value, fontWeight: "bold" })),
       ...rows.map((row) => row.map((value) => ({ value })))
     ];
-    await writeXlsxFile(sheetData).toFile(`درجات-${state.course.name || "المقرر"}-${today()}.xlsx`);
+    const sectionSuffix =
+      exportSectionKind === "all"
+        ? "كل-الشعب"
+        : `${kindLabel(exportSectionKind)}-${exportSectionNumber || "كل-الشعب"}`;
+    await writeXlsxFile(sheetData).toFile(`درجات-${state.course.name || "المقرر"}-${sectionSuffix}-${today()}.xlsx`);
   }
 
   async function resetAll() {
@@ -587,6 +657,38 @@ function App() {
                 استدعاء
               </button>
             </>
+          )}
+          {currentUser && (
+            <div className="export-controls" aria-label="تصدير الدرجات حسب الشعبة">
+              <select
+                value={exportSectionKind}
+                onChange={(event) => {
+                  setExportSectionKind(event.target.value as "all" | AssessmentKind);
+                  setExportSectionNumber("");
+                }}
+                disabled={!state.trainees.length}
+                aria-label="نوع شعبة التصدير"
+              >
+                <option value="all">كل الشعب</option>
+                <option value="theory">شعبة نظري</option>
+                <option value="practical">شعبة عملي</option>
+              </select>
+              {exportSectionKind !== "all" && (
+                <select
+                  value={exportSectionNumber}
+                  onChange={(event) => setExportSectionNumber(event.target.value)}
+                  disabled={!exportSectionOptions.length}
+                  aria-label="رقم شعبة التصدير"
+                >
+                  <option value="">كل الشعب</option>
+                  {exportSectionOptions.map((section) => (
+                    <option key={section} value={section}>
+                      {section}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
           )}
           <button className="button" onClick={exportWorkbook} disabled={!currentUser || !state.trainees.length}>
             <Download size={18} />
@@ -914,8 +1016,49 @@ function App() {
         <div className="panel import-panel">
           <div className="panel-head">
             <h2>1. إضافة أسماء المتدربين</h2>
-            <span>أضف الأسماء يدويًا أو استورد ملفًا، وسيتم ربطهم بشعبة المقرر الحالية.</span>
+            <span>أضف الأسماء يدويًا أو استورد ملفًا، ثم أدر الأسماء والأرقام التدريبية حسب الشعبة النظرية أو العملية.</span>
           </div>
+          <div className="section-management" aria-label="إدارة المتدربين حسب الشعبة">
+            <label>
+              نوع الإدارة
+              <select
+                value={manageSectionKind}
+                onChange={(event) => {
+                  setManageSectionKind(event.target.value as "all" | AssessmentKind);
+                  setManageSectionNumber("");
+                }}
+              >
+                <option value="all">كل المتدربين</option>
+                <option value="theory">حسب الشعبة النظرية</option>
+                <option value="practical">حسب الشعبة العملية</option>
+              </select>
+            </label>
+            {manageSectionKind !== "all" && (
+              <label>
+                رقم الشعبة
+                <input
+                  list="manage-section-options"
+                  value={manageSectionNumber}
+                  placeholder="اكتب أو اختر رقم الشعبة"
+                  onChange={(event) => setManageSectionNumber(event.target.value)}
+                />
+                <datalist id="manage-section-options">
+                  {manageSectionOptions.map((section) => (
+                    <option key={section} value={section} />
+                  ))}
+                </datalist>
+              </label>
+            )}
+            <div className="section-summary">
+              <span>المعروض</span>
+              <strong>{managedTrainees.length} من {state.trainees.length}</strong>
+            </div>
+          </div>
+          {manageSectionKind !== "all" && manageSectionNumber.trim() && (
+            <p className="helper-text">
+              أي أسماء تضيفها يدويًا الآن ستُربط بـ {kindLabel(manageSectionKind)} شعبة {manageSectionNumber.trim()}.
+            </p>
+          )}
           <div className="names-tools">
             <textarea
               className="desktop-manual-entry"
@@ -977,7 +1120,7 @@ function App() {
                 </tr>
               </thead>
               <tbody>
-                {state.trainees.map((trainee) => (
+                {managedTrainees.map((trainee) => (
                   <tr key={trainee.id}>
                     <td>
                       <input
@@ -1007,10 +1150,12 @@ function App() {
                     </td>
                   </tr>
                 ))}
-                {!state.trainees.length && (
+                {!managedTrainees.length && (
                   <tr>
                     <td colSpan={4} className="empty">
-                      لا توجد أسماء بعد. استخدم الإدخال اليدوي أو استيراد ملف Excel/CSV.
+                      {manageSectionKind === "all"
+                        ? "لا توجد أسماء بعد. استخدم الإدخال اليدوي أو استيراد ملف Excel/CSV."
+                        : "لا توجد أسماء في هذه الشعبة بعد. استخدم الإدخال اليدوي أو استيراد ملف Excel/CSV."}
                     </td>
                   </tr>
                 )}

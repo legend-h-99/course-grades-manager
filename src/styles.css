@@ -322,7 +322,8 @@ h2 {
 .top-actions,
 .assessment-form,
 .panel-head.horizontal,
-.search-box {
+.search-box,
+.export-controls {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -393,6 +394,19 @@ textarea:focus-visible {
   font-size: 13px;
   font-weight: 900;
   white-space: nowrap;
+}
+
+.export-controls {
+  gap: 8px;
+}
+
+.export-controls select {
+  width: auto;
+  min-width: 126px;
+  max-width: 170px;
+  min-height: 46px;
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .metrics-grid {
@@ -872,6 +886,44 @@ textarea {
   margin-bottom: 14px;
 }
 
+.section-management {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(150px, 1fr)) minmax(120px, 0.55fr);
+  gap: 10px;
+  margin-bottom: 12px;
+  align-items: end;
+}
+
+.section-management label {
+  display: grid;
+  gap: 6px;
+  color: #445158;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.section-summary {
+  min-height: 72px;
+  border: 1px solid #dbe8e3;
+  border-radius: 8px;
+  padding: 10px;
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  background: #f6fbf8;
+}
+
+.section-summary span {
+  color: #607077;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.section-summary strong {
+  color: #1f6f61;
+  font-size: 18px;
+}
+
 .names-actions {
   display: grid;
   align-content: start;
@@ -1285,7 +1337,8 @@ textarea {
 
   .top-actions,
   .assessment-form,
-  .storage-actions {
+  .storage-actions,
+  .export-controls {
     grid-template-columns: 1fr;
     display: grid;
   }
@@ -1356,6 +1409,7 @@ textarea {
 
   .setup-grid,
   .names-tools,
+  .section-management,
   .join-form,
   .course-result {
     grid-template-columns: 1fr;
@@ -1375,8 +1429,13 @@ textarea {
 
   .button,
   .icon-button,
-  label.button {
+  label.button,
+  .export-controls select {
     width: 100%;
+  }
+
+  .export-controls {
+    grid-column: 1 / -1;
   }
 
   .icon-button {
