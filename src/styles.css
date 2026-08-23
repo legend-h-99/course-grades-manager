@@ -11,6 +11,7 @@
 
 html {
   scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
@@ -39,6 +40,7 @@ select {
 
 button {
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 a {
@@ -317,7 +319,7 @@ h2 {
   border: 1px solid #cfd8dc;
   background: #ffffff;
   color: #17202a;
-  min-height: 42px;
+  min-height: 46px;
   border-radius: 8px;
   padding: 0 14px;
   display: inline-flex;
@@ -350,7 +352,7 @@ h2 {
 }
 
 .icon-button {
-  width: 42px;
+  width: 46px;
   padding: 0;
 }
 
@@ -489,6 +491,8 @@ h2 {
   background: #e8f3ee;
   color: #1f6f61;
   font-size: 13px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .join-form {
@@ -586,7 +590,7 @@ h2 {
   border: 1px solid #cfd8dc;
   background: #ffffff;
   border-radius: 8px;
-  min-height: 38px;
+  min-height: 44px;
   font-weight: 800;
 }
 
@@ -743,6 +747,8 @@ h2 {
   overflow: auto;
   border: 1px solid #e2e8eb;
   border-radius: 8px;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-inline: contain;
 }
 
 .table-wrap.compact {
@@ -800,7 +806,7 @@ textarea {
   width: 100%;
   border: 1px solid #cfd8dc;
   border-radius: 8px;
-  min-height: 38px;
+  min-height: 44px;
   padding: 7px 10px;
   background: white;
   color: #17202a;
@@ -879,6 +885,7 @@ textarea {
   border-radius: 8px;
   padding: 0 10px;
   background: #ffffff;
+  min-height: 46px;
 }
 
 .search-box input {
@@ -1059,11 +1066,18 @@ textarea {
 
 @media (max-width: 760px) {
   .app-shell {
-    width: min(100% - 20px, 1480px);
-    padding-top: 14px;
+    width: min(100% - 24px, 1480px);
+    padding: 10px 0 28px;
   }
 
-  .topbar,
+  .topbar {
+    display: grid;
+    gap: 10px;
+    position: static;
+    padding: 8px 0 12px;
+    margin-bottom: 12px;
+  }
+
   .panel-head.horizontal,
   .setup-heading {
     display: grid;
@@ -1071,6 +1085,44 @@ textarea {
 
   .brand-block {
     min-width: 0;
+    gap: 10px;
+    align-items: flex-start;
+  }
+
+  .brand-mark {
+    width: 42px;
+    height: 42px;
+    flex: 0 0 42px;
+  }
+
+  h1 {
+    font-size: 22px;
+    line-height: 1.35;
+  }
+
+  h2 {
+    font-size: 18px;
+    line-height: 1.45;
+  }
+
+  .main-nav {
+    order: 0;
+    width: 100%;
+    justify-content: flex-start;
+    overflow-x: auto;
+    scrollbar-width: none;
+    scroll-snap-type: x proximity;
+  }
+
+  .main-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .main-nav button {
+    flex: 0 0 auto;
+    min-height: 44px;
+    padding-inline: 14px;
+    scroll-snap-align: start;
   }
 
   .top-actions,
@@ -1080,12 +1132,64 @@ textarea {
     display: grid;
   }
 
+  .top-actions {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .top-actions .session-chip,
+  .top-actions .button:nth-last-child(2) {
+    grid-column: 1 / -1;
+  }
+
+  .session-chip {
+    width: 100%;
+    justify-content: center;
+    min-height: 44px;
+    white-space: normal;
+    text-align: center;
+  }
+
+  .home-panel,
+  .auth-panel,
+  .setup-panel,
+  .storage-panel,
+  .code-card,
+  .join-card,
+  .panel {
+    padding: 12px;
+  }
+
+  .home-copy h2 {
+    font-size: 24px;
+  }
+
+  .home-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
   .storage-panel {
     display: grid;
   }
 
   .metrics-grid {
     grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .metric {
+    grid-template-columns: 38px 1fr;
+    min-height: 78px;
+    padding: 12px;
+  }
+
+  .metric-icon {
+    width: 38px;
+    height: 38px;
+  }
+
+  .metric strong {
+    font-size: 22px;
   }
 
   .hero-mini-grid {
@@ -1104,7 +1208,101 @@ textarea {
   }
 
   .button,
-  .icon-button {
+  .icon-button,
+  label.button {
     width: 100%;
+  }
+
+  .icon-button {
+    min-width: 46px;
+  }
+
+  .feature-strip,
+  .assessment-list {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .feature-strip span,
+  .pill {
+    min-height: 44px;
+    justify-content: flex-start;
+  }
+
+  .table-wrap {
+    max-width: 100%;
+    margin-inline: -2px;
+  }
+
+  table {
+    min-width: 640px;
+  }
+
+  .grades-table {
+    min-width: 820px;
+  }
+
+  th,
+  td {
+    padding: 9px 8px;
+  }
+
+  .grade-input {
+    width: 68px;
+    min-height: 42px;
+  }
+
+  .search-box {
+    width: 100%;
+  }
+
+  .card-sections,
+  .score-head,
+  .score-row,
+  .grand-total {
+    gap: 8px;
+  }
+}
+
+@media (max-width: 520px) {
+  .app-shell {
+    width: min(100% - 16px, 1480px);
+  }
+
+  .top-actions,
+  .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .top-actions .session-chip,
+  .top-actions .button:nth-last-child(2) {
+    grid-column: auto;
+  }
+
+  .hero-card-main,
+  .score-head,
+  .score-row,
+  .grand-total {
+    display: grid;
+  }
+
+  .card-sections {
+    grid-template-columns: 1fr;
+  }
+
+  .code-card h2 {
+    font-size: 24px;
+    overflow-wrap: anywhere;
+  }
+
+  .trainer-stack strong,
+  .linked-trainers strong {
+    width: 100%;
+    justify-content: center;
+    margin-inline: 0;
+  }
+
+  .table-wrap.compact {
+    max-height: 330px;
   }
 }
