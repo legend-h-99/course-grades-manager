@@ -608,6 +608,15 @@ textarea:focus-visible {
   font-weight: 800;
 }
 
+.auth-switch {
+  border: 0;
+  background: transparent;
+  color: #1f6f61;
+  min-height: 38px;
+  padding: 0;
+  font-weight: 900;
+}
+
 .locked-panel {
   text-align: center;
 }

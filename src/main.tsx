@@ -617,32 +617,20 @@ function App() {
           <button type="button" className={page === "home" ? "active" : ""} onClick={() => goTo("home")}>
             الرئيسية
           </button>
-          <button type="button" className={page === "login" ? "active" : ""} onClick={() => goTo("login")}>
-            الدخول
-          </button>
-          <button type="button" className={page === "app" ? "active" : ""} onClick={() => goTo(currentUser ? "app" : "login")}>
-            لوحة الدرجات
-          </button>
+          {currentUser && (
+            <button type="button" className={page === "app" ? "active" : ""} onClick={() => goTo("app")}>
+              لوحة الدرجات
+            </button>
+          )}
         </nav>
         <div className="top-actions">
           {currentUser && <span className="session-chip">مرحبًا، {currentUser.fullName}</span>}
-          {currentUser ? (
+          {currentUser && (
             <button className="button" onClick={logoutUser}>
               <LogOut size={18} />
               خروج
             </button>
-          ) : page === "home" ? (
-            <>
-              <button className="button topbar-login-btn" onClick={() => goTo("login")}>
-                <LogIn size={18} />
-                دخول
-              </button>
-              <button className="button primary topbar-register-btn" onClick={() => goTo("register")}>
-                <UserPlus size={18} />
-                حساب جديد
-              </button>
-            </>
-          ) : null}
+          )}
           {currentUser && (
             <>
               <button className="button" onClick={saveNow}>
@@ -1366,14 +1354,6 @@ function AuthPanel({
         <p>ابدأ بحساب المدرب حتى يتم حفظ مساحة العمل على السحابة، ثم أكمل بيانات المقرر والمتدربين.</p>
       </div>
       <div className="auth-form">
-        <div className="auth-tabs" role="tablist" aria-label="التسجيل والدخول">
-          <button type="button" className={isRegister ? "active" : ""} aria-selected={isRegister} onClick={() => onModeChange("register")}>
-            إنشاء حساب
-          </button>
-          <button type="button" className={!isRegister ? "active" : ""} aria-selected={!isRegister} onClick={() => onModeChange("login")}>
-            دخول
-          </button>
-        </div>
         {isRegister && (
           <label>
             اسم المستخدم
@@ -1406,6 +1386,13 @@ function AuthPanel({
         <button className="button primary" onClick={isRegister ? onRegister : onLogin}>
           {isRegister ? <UserPlus size={18} /> : <LogIn size={18} />}
           {isRegister ? "إنشاء الحساب" : "تسجيل الدخول"}
+        </button>
+        <button
+          type="button"
+          className="auth-switch"
+          onClick={() => onModeChange(isRegister ? "login" : "register")}
+        >
+          {isRegister ? "لديك حساب؟ تسجيل الدخول" : "ليس لديك حساب؟ إنشاء حساب"}
         </button>
       </div>
     </section>
