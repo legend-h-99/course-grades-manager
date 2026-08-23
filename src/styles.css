@@ -420,6 +420,10 @@ textarea:focus-visible {
   border-color: rgba(255, 255, 255, 0.28);
 }
 
+.mobile-workspace-actions {
+  display: none;
+}
+
 .course-code-panel {
   display: grid;
   grid-template-columns: minmax(280px, 0.45fr) minmax(0, 1fr);
@@ -1288,6 +1292,11 @@ textarea {
     display: none;
   }
 
+  .app-shell.is-guest .topbar > .top-actions,
+  .app-shell.is-authenticated .topbar > .top-actions {
+    display: none;
+  }
+
   .panel-head.horizontal,
   .setup-heading {
     display: grid;
@@ -1377,11 +1386,34 @@ textarea {
 
   .landing-section {
     padding: 20px 12px;
-    gap: 28px;
+    gap: 16px;
+  }
+
+  .landing-hero {
+    min-width: 0;
+    text-align: center;
+  }
+
+  .landing-hero h2 {
+    font-size: 22px;
+    line-height: 1.45;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .landing-lead {
+    margin: 10px auto 16px;
+    font-size: 14px;
+  }
+
+  .landing-cta {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
   }
 
   .landing-features {
-    grid-template-columns: 1fr;
+    display: none;
   }
 
   .app-shell > *,
@@ -1413,6 +1445,23 @@ textarea {
 
   .storage-panel {
     display: grid;
+  }
+
+  .mobile-workspace-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    background: #ffffff;
+    border: 1px solid #dce3e7;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 16px;
+    box-shadow: 0 10px 24px rgba(23, 32, 42, 0.04);
+  }
+
+  .mobile-workspace-actions .export-controls,
+  .mobile-workspace-actions .btn-export {
+    grid-column: 1 / -1;
   }
 
   .metrics-grid {

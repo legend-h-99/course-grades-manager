@@ -602,7 +602,7 @@ function App() {
   }
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell ${currentUser ? "is-authenticated" : "is-guest"} page-${page}`}>
       <header className="topbar">
         <div className="brand-block">
           <span className="brand-mark">
@@ -792,6 +792,50 @@ function App() {
             استدعاء آخر حفظ
           </button>
         </div>
+      </section>
+      <section className="mobile-workspace-actions" aria-label="إجراءات مساحة العمل">
+        <button className="button" onClick={logoutUser}>
+          <LogOut size={18} />
+          خروج
+        </button>
+        <div className="export-controls" aria-label="تصدير الدرجات حسب الشعبة">
+          <select
+            value={exportSectionKind}
+            onChange={(event) => {
+              setExportSectionKind(event.target.value as "all" | AssessmentKind);
+              setExportSectionNumber("");
+            }}
+            disabled={!state.trainees.length}
+            aria-label="نوع شعبة التصدير"
+          >
+            <option value="all">كل الشعب</option>
+            <option value="theory">شعبة نظري</option>
+            <option value="practical">شعبة عملي</option>
+          </select>
+          {exportSectionKind !== "all" && (
+            <select
+              value={exportSectionNumber}
+              onChange={(event) => setExportSectionNumber(event.target.value)}
+              disabled={!exportSectionOptions.length}
+              aria-label="رقم شعبة التصدير"
+            >
+              <option value="">كل الشعب</option>
+              {exportSectionOptions.map((section) => (
+                <option key={section} value={section}>
+                  {section}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+        <button className="button btn-export" onClick={exportWorkbook} disabled={!state.trainees.length}>
+          <Download size={18} />
+          تصدير Excel
+        </button>
+        <button className="button" onClick={resetAll}>
+          <RotateCcw size={18} />
+          إعادة ضبط
+        </button>
       </section>
       <section className="course-code-panel" aria-label="رمز المقرر والانضمام">
         <div className="code-card">
