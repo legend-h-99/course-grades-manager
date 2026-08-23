@@ -542,16 +542,16 @@ function App() {
           </div>
         </div>
         <nav className="main-nav" aria-label="روابط الصفحة">
-          <button className={page === "home" ? "active" : ""} onClick={() => goTo("home")}>
+          <button type="button" className={page === "home" ? "active" : ""} onClick={() => goTo("home")}>
             الرئيسية
           </button>
-          <button className={page === "register" ? "active" : ""} onClick={() => goTo("register")}>
+          <button type="button" className={page === "register" ? "active" : ""} onClick={() => goTo("register")}>
             التسجيل
           </button>
-          <button className={page === "login" ? "active" : ""} onClick={() => goTo("login")}>
+          <button type="button" className={page === "login" ? "active" : ""} onClick={() => goTo("login")}>
             الدخول
           </button>
-          <button className={page === "app" ? "active" : ""} onClick={() => goTo(currentUser ? "app" : "login")}>
+          <button type="button" className={page === "app" ? "active" : ""} onClick={() => goTo(currentUser ? "app" : "login")}>
             لوحة الدرجات
           </button>
         </nav>
@@ -590,7 +590,7 @@ function App() {
             <Download size={18} />
             تصدير Excel
           </button>
-          <button className="icon-button" onClick={resetAll} title="إعادة ضبط البيانات">
+          <button className="icon-button" onClick={resetAll} title="إعادة ضبط البيانات" aria-label="إعادة ضبط البيانات">
             <RotateCcw size={18} />
           </button>
         </div>
@@ -1161,10 +1161,10 @@ function AuthPanel({
       </div>
       <div className="auth-form">
         <div className="auth-tabs" role="tablist" aria-label="التسجيل والدخول">
-          <button className={isRegister ? "active" : ""} onClick={() => onModeChange("register")}>
+          <button type="button" className={isRegister ? "active" : ""} aria-selected={isRegister} onClick={() => onModeChange("register")}>
             إنشاء حساب
           </button>
-          <button className={!isRegister ? "active" : ""} onClick={() => onModeChange("login")}>
+          <button type="button" className={!isRegister ? "active" : ""} aria-selected={!isRegister} onClick={() => onModeChange("login")}>
             دخول
           </button>
         </div>

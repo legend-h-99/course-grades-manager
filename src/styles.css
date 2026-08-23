@@ -16,6 +16,8 @@ html {
 
 body {
   margin: 0;
+  font-size: 16px;
+  line-height: 1.6;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0, rgba(238, 242, 244, 0.9) 310px),
     #eef2f4;
@@ -34,7 +36,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -64,6 +67,7 @@ a {
   z-index: 5;
   padding: 12px 0;
   backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(207, 216, 220, 0.62);
 }
 
 .brand-block {
@@ -92,7 +96,8 @@ a {
   padding: 6px;
   border: 1px solid #dbe3e6;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.84);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 8px 24px rgba(23, 32, 42, 0.04);
 }
 
 .main-nav button {
@@ -112,10 +117,14 @@ a {
   color: #1f6f61;
 }
 
+.main-nav button.active {
+  box-shadow: inset 0 0 0 1px #c9e3d7;
+}
+
 .home-panel {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(340px, 0.72fr);
-  gap: 16px;
+  gap: 24px;
   align-items: stretch;
   background: #ffffff;
   border: 1px solid #dce3e7;
@@ -136,6 +145,7 @@ a {
   margin: 6px 0 8px;
   font-size: clamp(24px, 3vw, 36px);
   line-height: 1.35;
+  max-width: 780px;
 }
 
 .home-copy p {
@@ -298,11 +308,15 @@ p {
 h1 {
   margin-bottom: 0;
   font-size: clamp(24px, 3vw, 38px);
+  line-height: 1.3;
+  font-weight: 900;
 }
 
 h2 {
   margin-bottom: 4px;
   font-size: 20px;
+  line-height: 1.45;
+  font-weight: 900;
 }
 
 .top-actions,
@@ -328,6 +342,17 @@ h2 {
   gap: 8px;
   font-weight: 700;
   transition: transform 180ms ease, border-color 180ms ease, background 180ms ease, color 180ms ease;
+}
+
+.button:focus-visible,
+.icon-button:focus-visible,
+.main-nav button:focus-visible,
+.auth-tabs button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid rgba(31, 111, 97, 0.24);
+  outline-offset: 2px;
 }
 
 .button.primary {
@@ -357,7 +382,7 @@ h2 {
 }
 
 .session-chip {
-  min-height: 38px;
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
   border: 1px solid #c9e3d7;
@@ -398,10 +423,15 @@ h2 {
   padding: 16px;
   margin-bottom: 16px;
   animation: fadeUp 540ms ease both;
+  box-shadow: 0 18px 44px rgba(23, 32, 42, 0.12);
 }
 
 .storage-panel h2 {
   color: #ffffff;
+}
+
+.storage-panel .section-kicker {
+  color: #9be0ca;
 }
 
 .storage-panel span,
@@ -440,6 +470,7 @@ h2 {
   border-radius: 8px;
   padding: 16px;
   animation: fadeUp 560ms ease both;
+  box-shadow: 0 14px 34px rgba(23, 32, 42, 0.05);
 }
 
 .code-card {
@@ -455,6 +486,7 @@ h2 {
   font-size: clamp(24px, 4vw, 38px);
   letter-spacing: 0;
   color: #1f6f61;
+  line-height: 1.18;
 }
 
 .code-card span {
@@ -484,7 +516,7 @@ h2 {
 .linked-trainers strong {
   display: inline-flex;
   align-items: center;
-  min-height: 30px;
+  min-height: 34px;
   margin: 0 0 6px 6px;
   padding: 0 9px;
   border-radius: 8px;
@@ -510,14 +542,14 @@ h2 {
 .course-result {
   display: grid;
   grid-template-columns: repeat(4, minmax(120px, 1fr));
-  gap: 8px;
-  margin-top: 12px;
+  gap: 10px;
+  margin-top: 14px;
 }
 
 .course-result div {
   border: 1px solid #e0e6e9;
   border-radius: 8px;
-  padding: 10px;
+  padding: 12px;
   background: #fbfcfc;
 }
 
@@ -548,6 +580,7 @@ h2 {
   padding: 16px;
   margin-bottom: 16px;
   animation: fadeUp 560ms ease both;
+  box-shadow: 0 14px 34px rgba(23, 32, 42, 0.05);
 }
 
 .auth-panel {
@@ -565,7 +598,7 @@ h2 {
 
 .auth-form {
   display: grid;
-  gap: 10px;
+  gap: 12px;
   border: 1px solid #e0e6e9;
   border-radius: 8px;
   padding: 12px;
@@ -583,7 +616,7 @@ h2 {
 .auth-tabs {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 6px;
+  gap: 8px;
 }
 
 .auth-tabs button {
@@ -621,7 +654,7 @@ h2 {
 
 .setup-heading span,
 .helper-text {
-  color: #607077;
+  color: #526168;
   font-size: 14px;
 }
 
@@ -651,7 +684,7 @@ h2 {
 .setup-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 10px;
+  gap: 12px;
   align-items: end;
 }
 
@@ -668,7 +701,7 @@ h2 {
 }
 
 .setup-save {
-  height: 42px;
+  min-height: 46px;
 }
 
 .metric {
@@ -682,6 +715,7 @@ h2 {
   column-gap: 10px;
   min-height: 86px;
   transition: transform 180ms ease, border-color 180ms ease;
+  box-shadow: 0 10px 24px rgba(23, 32, 42, 0.04);
 }
 
 .metric-icon {
@@ -700,11 +734,14 @@ h2 {
 }
 
 .metric span {
-  color: #5f6c72;
+  color: #526168;
+  font-size: 14px;
+  font-weight: 800;
 }
 
 .metric strong {
   font-size: 26px;
+  line-height: 1.2;
 }
 
 .workflow {
@@ -726,16 +763,18 @@ h2 {
   padding: 16px;
   min-width: 0;
   transition: transform 180ms ease, border-color 180ms ease;
+  box-shadow: 0 12px 30px rgba(23, 32, 42, 0.045);
 }
 
 .panel-head {
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
 .panel-head span,
 .muted {
-  color: #607077;
+  color: #526168;
   font-size: 14px;
+  line-height: 1.7;
 }
 
 .panel-head.horizontal {
@@ -770,9 +809,10 @@ td {
 }
 
 th {
-  background: #f7f9fa;
+  background: #f2f6f7;
   color: #445158;
   font-size: 13px;
+  font-weight: 900;
   position: sticky;
   top: 0;
   z-index: 1;
@@ -841,6 +881,10 @@ textarea {
 .helper-text {
   margin: 0;
   line-height: 1.5;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: #f6fbf8;
+  border: 1px solid #dbe8e3;
 }
 
 .assessment-form {
@@ -886,6 +930,12 @@ textarea {
   padding: 0 10px;
   background: #ffffff;
   min-height: 46px;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.search-box:focus-within {
+  border-color: #1f6f61;
+  box-shadow: 0 0 0 3px rgba(31, 111, 97, 0.14);
 }
 
 .search-box input {
@@ -1025,6 +1075,8 @@ textarea {
 .grand-total {
   margin-top: 14px;
   align-items: center;
+  border-color: #c9e3d7;
+  background: #f6fbf8;
 }
 
 .grand-total strong {
@@ -1036,6 +1088,18 @@ textarea {
   text-align: center;
   color: #607077;
   padding: 28px;
+  line-height: 1.7;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 @media (max-width: 1100px) {
