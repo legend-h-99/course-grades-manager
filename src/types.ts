@@ -67,8 +67,9 @@ export type AuthUser = {
   id: string;
   fullName: string;
   email: string;
-  password: string;
   createdAt: string;
 };
 
 export type AppPage = "home" | "register" | "login" | "app";
+
+export type SessionUser = { id: string; fullName: string; email: string };

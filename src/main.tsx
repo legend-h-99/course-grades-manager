@@ -1,4 +1,4 @@
-import React, { ChangeEvent, useEffect, useMemo, useState } from "react";
+import React, { ChangeEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   BarChart3,
@@ -50,9 +50,15 @@ import {
   saveWorkspace,
   type CoursePreview
 } from "./storage";
-import type { AppPage, AppState, Assessment, AssessmentKind, Grade, Trainee } from "./types";
+import type { AccountProfile, AppPage, AppState, Assessment, AssessmentKind, CourseSetup, Grade, SessionUser, Trainee, TrainerProfile } from "./types";
 
-type SessionUser = { id: string; fullName: string; email: string };
+function makeSessionUser(user: { id: string; email?: string; user_metadata?: Record<string, unknown> }): SessionUser {
+  return {
+    id: user.id,
+    email: user.email ?? "",
+    fullName: (user.user_metadata?.full_name as string) ?? ""
+  };
+}
 
 function readInitialPage(): AppPage {
   const hashPath = window.location.hash.replace(/^#\/?/, "");
@@ -108,14 +114,9 @@ function App() {
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
-        const user = session.user;
-        const sessionUser: SessionUser = {
-          id: user.id,
-          email: user.email ?? "",
-          fullName: (user.user_metadata?.full_name as string) ?? ""
-        };
+        const sessionUser = makeSessionUser(session.user);
         setCurrentUser(sessionUser);
-        const workspace = await loadWorkspace(user.id);
+        const workspace = await loadWorkspace(session.user.id);
         setState(workspace);
         setLastSavedAt(workspace.course.savedAt);
         goTo("app");
@@ -125,13 +126,7 @@ function App() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === "SIGNED_IN" && session?.user) {
-        const user = session.user;
-        const sessionUser: SessionUser = {
-          id: user.id,
-          email: user.email ?? "",
-          fullName: (user.user_metadata?.full_name as string) ?? ""
-        };
-        setCurrentUser(sessionUser);
+        setCurrentUser(makeSessionUser(session.user));
       } else if (event === "SIGNED_OUT") {
         setCurrentUser(null);
         setState(starterState);
@@ -198,22 +193,49 @@ function App() {
     return state.trainees.map((trainee) => getTraineeTotals(trainee.id, state.assessments, state.grades));
   }, [state.assessments, state.grades, state.trainees]);
 
-  const average = totals.length
-    ? totals.reduce((sum, item) => sum + item.total, 0) / totals.length
-    : 0;
+  const average = useMemo(
+    () => (totals.length ? totals.reduce((sum, item) => sum + item.total, 0) / totals.length : 0),
+    [totals]
+  );
 
-  const courseTrainers = state.trainers.length
-    ? state.trainers
-    : currentUser && state.trainer.name
-      ? [trainerEntry(currentUser.id, state.trainer)]
-      : [];
+  const courseTrainers = useMemo(
+    () =>
+      state.trainers.length
+        ? state.trainers
+        : currentUser && state.trainer.name
+          ? [trainerEntry(currentUser.id, state.trainer)]
+          : [],
+    [state.trainers, currentUser, state.trainer]
+  );
 
-  const setupReady = Boolean(
-    state.account.collegeName.trim() &&
-      state.account.departmentName.trim() &&
-      state.trainer.name.trim() &&
-      state.course.name.trim() &&
-      state.course.sectionNumber.trim()
+  const setupReady = useMemo(
+    () =>
+      Boolean(
+        state.account.collegeName.trim() &&
+          state.account.departmentName.trim() &&
+          state.trainer.name.trim() &&
+          state.course.name.trim() &&
+          state.course.sectionNumber.trim()
+      ),
+    [state.account, state.trainer, state.course]
+  );
+
+  const setAccount = useCallback(
+    (key: keyof AccountProfile, value: string) =>
+      setState((c) => ({ ...c, account: { ...c.account, [key]: value } })),
+    []
+  );
+
+  const setTrainer = useCallback(
+    (key: keyof TrainerProfile, value: string) =>
+      setState((c) => ({ ...c, trainer: { ...c.trainer, [key]: value } })),
+    []
+  );
+
+  const setCourse = useCallback(
+    (key: keyof CourseSetup, value: string) =>
+      setState((c) => ({ ...c, course: { ...c.course, [key]: value as never } })),
+    []
   );
 
   async function saveSetup() {
@@ -272,14 +294,8 @@ function App() {
       setAuthMessage("بيانات الدخول غير صحيحة.");
       return;
     }
-    const user = data.user;
-    const sessionUser: SessionUser = {
-      id: user.id,
-      email: user.email ?? "",
-      fullName: (user.user_metadata?.full_name as string) ?? ""
-    };
-    setCurrentUser(sessionUser);
-    const workspace = await loadWorkspace(user.id);
+    setCurrentUser(makeSessionUser(data.user));
+    const workspace = await loadWorkspace(data.user.id);
     setState(workspace);
     setLastSavedAt(workspace.course.savedAt);
     setAuthMessage("تم تسجيل الدخول.");
@@ -329,6 +345,13 @@ function App() {
 
   async function joinCourseByCode() {
     if (!currentUser || !courseLookup) return;
+    const alreadyJoined =
+      state.course.code === courseLookup.code &&
+      courseTrainers.some((trainer) => trainer.userId === currentUser.id);
+    if (alreadyJoined) {
+      setCourseLookupMessage("أنت مرتبط بهذا المقرر بالفعل.");
+      return;
+    }
     await joinCourse(currentUser.id, courseLookup, state.trainer.name || currentUser.fullName, state.trainer.employeeNumber);
     const workspace = await loadWorkspace(currentUser.id);
     setState(workspace);

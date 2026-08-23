@@ -112,24 +112,44 @@ export async function saveWorkspace(userId: string, state: AppState): Promise<vo
     { onConflict: "id" }
   );
 
-  const { data: courseRow, error: courseError } = await supabase
+  const { data: existingCourse, error: existingCourseError } = await supabase
     .from("courses")
-    .upsert(
-      {
-        code: state.course.code,
-        name: state.course.name,
-        kind: state.course.kind,
-        section_number: state.course.sectionNumber,
-        saved_at: state.course.savedAt,
-        created_by: userId,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "code" }
-    )
     .select("id")
-    .single();
+    .eq("code", state.course.code)
+    .maybeSingle();
 
-  if (courseError || !courseRow) return;
+  if (existingCourseError) throw existingCourseError;
+
+  const coursePayload = {
+    name: state.course.name,
+    kind: state.course.kind,
+    section_number: state.course.sectionNumber,
+    saved_at: state.course.savedAt,
+    updated_at: new Date().toISOString(),
+  };
+
+  const courseMutation = existingCourse
+    ? supabase
+        .from("courses")
+        .update(coursePayload)
+        .eq("id", existingCourse.id)
+        .select("id")
+        .single()
+    : supabase
+        .from("courses")
+        .insert(
+          {
+            code: state.course.code,
+            ...coursePayload,
+            created_by: userId,
+          }
+        )
+        .select("id")
+        .single();
+
+  const { data: courseRow, error: courseError } = await courseMutation;
+
+  if (courseError || !courseRow) throw courseError ?? new Error("تعذر حفظ بيانات المقرر.");
   const courseId = courseRow.id;
 
   await supabase
