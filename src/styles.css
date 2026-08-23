@@ -1304,6 +1304,48 @@ textarea {
     justify-items: stretch;
   }
 
+  /* Brand + single دخول button in one compact row */
+  .topbar > .brand-block,
+  .topbar > .top-actions {
+    display: flex;
+    align-items: center;
+  }
+
+  .topbar > .brand-block {
+    flex: 1;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .topbar > .top-actions {
+    flex-direction: row;
+    gap: 8px;
+    width: auto;
+    grid-template-columns: unset;
+  }
+
+  .topbar > .top-actions .topbar-login-btn {
+    width: auto;
+    padding: 0 14px;
+  }
+
+  /* First row: brand + top-actions side by side */
+  .topbar {
+    grid-template-areas:
+      "brand actions"
+      "nav   nav";
+    grid-template-columns: 1fr auto;
+  }
+
+  .topbar > .brand-block  { grid-area: brand; }
+  .topbar > .top-actions  { grid-area: actions; }
+  .topbar > .main-nav     { grid-area: nav; }
+
+  /* On mobile: hide حساب جديد from topbar (available in home content) */
+  .topbar-register-btn {
+    display: none;
+  }
+
   .panel-head.horizontal,
   .setup-heading {
     display: grid;
@@ -1324,8 +1366,11 @@ textarea {
   }
 
   h1 {
-    font-size: 20px;
-    line-height: 1.35;
+    font-size: 17px;
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   h2 {

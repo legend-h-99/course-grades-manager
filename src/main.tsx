@@ -634,18 +634,18 @@ function App() {
               <LogOut size={18} />
               خروج
             </button>
-          ) : (
+          ) : page === "home" ? (
             <>
-              <button className="button" onClick={() => goTo("login")}>
+              <button className="button topbar-login-btn" onClick={() => goTo("login")}>
                 <LogIn size={18} />
                 دخول
               </button>
-              <button className="button primary" onClick={() => goTo("register")}>
+              <button className="button primary topbar-register-btn" onClick={() => goTo("register")}>
                 <UserPlus size={18} />
                 حساب جديد
               </button>
             </>
-          )}
+          ) : null}
           {currentUser && (
             <>
               <button className="button" onClick={saveNow}>
@@ -881,7 +881,7 @@ function App() {
       <section className="setup-panel" id="onboarding">
         <div className="setup-heading">
           <div>
-            <p className="section-kicker">Onboarding</p>
+            <p className="section-kicker">البدء</p>
             <h2>إنشاء حساب المقرر</h2>
             <span>أدخل بيانات الكلية والقسم، ثم اسم المدرب والمقرر لإنشاء مساحة العمل.</span>
           </div>
@@ -1337,7 +1337,7 @@ function AuthPanel({
   return (
     <section className="auth-panel" id="auth">
       <div className="auth-copy">
-        <p className="section-kicker">Onboarding</p>
+        <p className="section-kicker">البدء</p>
         <h2>{isRegister ? "إنشاء حساب جديد" : "تسجيل الدخول"}</h2>
         <p>ابدأ بحساب المدرب حتى يتم حفظ مساحة العمل على السحابة، ثم أكمل بيانات المقرر والمتدربين.</p>
       </div>
