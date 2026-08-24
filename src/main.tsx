@@ -27,8 +27,12 @@ import type { SheetData } from "write-excel-file/browser";
 import {
   applyCourseSection,
   generateCourseCode,
+  getClassStats,
   getGradeValue,
+  getMaxPossibleTotal,
   getTraineeTotals,
+  getTraineeTotalsWeighted,
+  isWeightedMode,
   kindLabel,
   mapRowsToTrainees,
   normalizeCourseCode,
@@ -38,7 +42,8 @@ import {
   starterState,
   today,
   trainerEntry,
-  withCourseTrainer
+  withCourseTrainer,
+  type ClassStats,
 } from "./courseData";
 import "./styles.css";
 import { supabase } from "./supabase";
@@ -130,7 +135,8 @@ function App() {
     name: "",
     kind: "theory" as AssessmentKind,
     maxScore: 10,
-    date: today()
+    date: today(),
+    weight: 0,
   });
 
   const isInitializedRef = useRef(false);
@@ -261,9 +267,22 @@ function App() {
     setActiveCardId(filteredTrainees[0]?.id ?? null);
   }, [filteredTrainees, query]);
 
+  const weighted = useMemo(() => isWeightedMode(state.assessments), [state.assessments]);
+
   const totals = useMemo(() => {
-    return state.trainees.map((trainee) => getTraineeTotals(trainee.id, state.assessments, state.grades));
-  }, [state.assessments, state.grades, state.trainees]);
+    return state.trainees.map((trainee) =>
+      weighted
+        ? getTraineeTotalsWeighted(trainee.id, state.assessments, state.grades)
+        : getTraineeTotals(trainee.id, state.assessments, state.grades)
+    );
+  }, [state.assessments, state.grades, state.trainees, weighted]);
+
+  const classStats = useMemo(
+    () => getClassStats(state.trainees, state.assessments, state.grades),
+    [state.trainees, state.assessments, state.grades]
+  );
+
+  const maxPossibleTotal = useMemo(() => getMaxPossibleTotal(state.assessments), [state.assessments]);
 
   const average = useMemo(
     () => (totals.length ? totals.reduce((sum, item) => sum + item.total, 0) / totals.length : 0),
@@ -621,11 +640,12 @@ function App() {
           name: assessmentDraft.name.trim(),
           kind: assessmentDraft.kind,
           maxScore: assessmentDraft.maxScore,
-          date: assessmentDraft.date
+          date: assessmentDraft.date,
+          weight: assessmentDraft.weight,
         }
       ]
     }));
-    setAssessmentDraft({ name: "", kind: state.course.kind, maxScore: 10, date: today() });
+    setAssessmentDraft({ name: "", kind: state.course.kind, maxScore: 10, date: today(), weight: 0 });
   }
 
   function updateGrade(traineeId: string, assessmentId: string, score: string) {
@@ -718,6 +738,58 @@ function App() {
         }
       }
     });
+  }
+
+  function printTraineeReport(trainee: Trainee) {
+    const win = window.open("", "_blank", "width=680,height=900");
+    if (!win) { toast("لم يتمكن المتصفح من فتح نافذة الطباعة.", "error"); return; }
+    const t = weighted
+      ? getTraineeTotalsWeighted(trainee.id, state.assessments, state.grades)
+      : getTraineeTotals(trainee.id, state.assessments, state.grades);
+    const theoryRows = state.assessments
+      .filter((a) => a.kind === "theory")
+      .map((a) => {
+        const score = getGradeValue(trainee.id, a.id, state.grades);
+        const contrib = weighted && a.weight ? `(${a.weight}%)` : "";
+        return `<tr><td>${a.name} ${contrib}</td><td>${score === "" ? "-" : score} / ${a.maxScore}</td></tr>`;
+      })
+      .join("");
+    const practicalRows = state.assessments
+      .filter((a) => a.kind === "practical")
+      .map((a) => {
+        const score = getGradeValue(trainee.id, a.id, state.grades);
+        const contrib = weighted && a.weight ? `(${a.weight}%)` : "";
+        return `<tr><td>${a.name} ${contrib}</td><td>${score === "" ? "-" : score} / ${a.maxScore}</td></tr>`;
+      })
+      .join("");
+    win.document.write(`<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8">
+<title>تقرير ${trainee.name}</title><style>
+body{font-family:"Segoe UI",Tahoma,Arial,sans-serif;direction:rtl;padding:32px;color:#17202a;max-width:560px;margin:auto;}
+h1{color:#1f6f61;margin:0 0 4px;}
+.sub{color:#607077;font-size:14px;margin:0 0 24px;}
+table{width:100%;border-collapse:collapse;margin:12px 0 20px;}
+th{background:#f7f9fa;padding:8px 12px;text-align:right;font-size:12px;color:#445158;border-bottom:2px solid #dce3e7;}
+td{padding:8px 12px;border-bottom:1px solid #e0e6e9;font-size:14px;}
+.sec{font-size:13px;font-weight:900;color:#1f6f61;margin:16px 0 4px;}
+.total{background:#e8f3ee;border-radius:8px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;margin-top:16px;}
+.total span{font-size:14px;color:#607077;}
+.total strong{font-size:26px;color:#1f6f61;font-weight:900;}
+@media print{button{display:none!important;}}
+</style></head><body>
+<button onclick="window.print()" style="margin-bottom:16px;padding:8px 16px;background:#1f6f61;color:#fff;border:0;border-radius:6px;cursor:pointer;font-size:14px;">طباعة / PDF</button>
+<h1>تقرير متدرب</h1>
+<p class="sub">${state.account.collegeName}${state.account.collegeName && state.course.name ? " — " : ""}${state.course.name}</p>
+<table>
+<tr><th>الاسم</th><td>${trainee.name}</td></tr>
+<tr><th>الرقم التدريبي</th><td>${trainee.trainingNumber || "-"}</td></tr>
+<tr><th>الشعبة النظرية</th><td>${trainee.theorySection || "-"}</td></tr>
+<tr><th>الشعبة العملية</th><td>${trainee.practicalSection || "-"}</td></tr>
+</table>
+${theoryRows ? `<p class="sec">درجات النظري</p><table><tr><th>الاختبار</th><th>الدرجة</th></tr>${theoryRows}</table>` : ""}
+${practicalRows ? `<p class="sec">درجات العملي</p><table><tr><th>الاختبار</th><th>الدرجة</th></tr>${practicalRows}</table>` : ""}
+<div class="total"><span>المجموع${weighted ? " الموزون" : ""}</span><strong>${t.total}</strong></div>
+</body></html>`);
+    win.document.close();
   }
 
   if (isLoading) {
@@ -1335,9 +1407,21 @@ function App() {
             <input
               type="number"
               min="1"
+              placeholder="الدرجة القصوى"
               value={assessmentDraft.maxScore}
               onChange={(event) =>
                 setAssessmentDraft((draft) => ({ ...draft, maxScore: numberOrZero(event.target.value) }))
+              }
+            />
+            <input
+              type="number"
+              min="0"
+              max="100"
+              placeholder="الوزن %"
+              title="وزن الاختبار من 100 (اتركه 0 لعدم استخدام الأوزان)"
+              value={assessmentDraft.weight || ""}
+              onChange={(event) =>
+                setAssessmentDraft((draft) => ({ ...draft, weight: numberOrZero(event.target.value) }))
               }
             />
             <input
@@ -1350,10 +1434,16 @@ function App() {
               إضافة
             </button>
           </div>
+          {weighted && (
+            <p className="helper-text weight-notice">
+              وضع الأوزان مفعّل — المجموع يُحسب كنسبة مئوية موزونة. مجموع الأوزان الحالي: {state.assessments.reduce((s, a) => s + (a.weight ?? 0), 0)}%
+            </p>
+          )}
           <div className="assessment-list">
             {state.assessments.map((assessment) => (
               <span key={assessment.id} className={`pill ${assessment.kind}`}>
-                {assessment.name} / {assessment.maxScore} / {kindLabel(assessment.kind)}
+                {assessment.name} / {assessment.maxScore}
+                {assessment.weight ? ` / ${assessment.weight}%` : ""} / {kindLabel(assessment.kind)}
               </span>
             ))}
           </div>
@@ -1385,14 +1475,19 @@ function App() {
                   <th>نظري</th>
                   <th>عملي</th>
                   {state.assessments.map((assessment) => (
-                    <th key={assessment.id}>{assessment.name}</th>
+                    <th key={assessment.id}>
+                      {assessment.name}
+                      {assessment.weight ? <small className="weight-badge">{assessment.weight}%</small> : null}
+                    </th>
                   ))}
-                  <th>المجموع</th>
+                  <th>{weighted ? "الموزون" : "المجموع"}</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredTrainees.map((trainee) => {
-                  const totals = getTraineeTotals(trainee.id, state.assessments, state.grades);
+                  const t = weighted
+                    ? getTraineeTotalsWeighted(trainee.id, state.assessments, state.grades)
+                    : getTraineeTotals(trainee.id, state.assessments, state.grades);
                   return (
                     <tr
                       key={trainee.id}
@@ -1421,7 +1516,7 @@ function App() {
                         </td>
                       ))}
                       <td>
-                        <strong>{totals.total}</strong>
+                        <strong>{t.total}</strong>
                       </td>
                     </tr>
                   );
@@ -1437,9 +1532,19 @@ function App() {
             </table>
           </div>
 
-          <TraineeCard trainee={activeCard} assessments={state.assessments} grades={state.grades} />
+          <TraineeCard
+            trainee={activeCard}
+            assessments={state.assessments}
+            grades={state.grades}
+            weighted={weighted}
+            onPrint={printTraineeReport}
+          />
         </div>
       </section>
+
+      {classStats && (
+        <StatsPanel stats={classStats} maxTotal={maxPossibleTotal} weighted={weighted} />
+      )}
         </>
       ) : page === "app" ? (
         <section className="locked-panel">
@@ -1668,11 +1773,15 @@ function Metric({ icon, label, value }: { icon: React.ReactNode; label: string; 
 function TraineeCard({
   trainee,
   assessments,
-  grades
+  grades,
+  weighted,
+  onPrint,
 }: {
   trainee: Trainee | null;
   assessments: Assessment[];
   grades: Grade[];
+  weighted: boolean;
+  onPrint: (trainee: Trainee) => void;
 }) {
   if (!trainee) {
     return (
@@ -1683,9 +1792,11 @@ function TraineeCard({
     );
   }
 
-  const theoryAssessments = assessments.filter((assessment) => assessment.kind === "theory");
-  const practicalAssessments = assessments.filter((assessment) => assessment.kind === "practical");
-  const totals = getTraineeTotals(trainee.id, assessments, grades);
+  const theoryAssessments = assessments.filter((a) => a.kind === "theory");
+  const practicalAssessments = assessments.filter((a) => a.kind === "practical");
+  const totals = weighted
+    ? getTraineeTotalsWeighted(trainee.id, assessments, grades)
+    : getTraineeTotals(trainee.id, assessments, grades);
 
   return (
     <aside className="student-card">
@@ -1719,6 +1830,7 @@ function TraineeCard({
         assessments={theoryAssessments}
         grades={grades}
         total={totals.theory}
+        weighted={weighted}
       />
       <ScoreGroup
         title="درجات العملي"
@@ -1726,11 +1838,15 @@ function TraineeCard({
         assessments={practicalAssessments}
         grades={grades}
         total={totals.practical}
+        weighted={weighted}
       />
       <div className="grand-total">
-        <span>المجموع الكامل</span>
+        <span>{weighted ? "المجموع الموزون" : "المجموع الكامل"}</span>
         <strong>{totals.total}</strong>
       </div>
+      <button className="button card-print-btn" onClick={() => onPrint(trainee)}>
+        طباعة / PDF
+      </button>
     </aside>
   );
 }
@@ -1740,13 +1856,15 @@ function ScoreGroup({
   traineeId,
   assessments,
   grades,
-  total
+  total,
+  weighted,
 }: {
   title: string;
   traineeId: string;
   assessments: Assessment[];
   grades: Grade[];
   total: number;
+  weighted: boolean;
 }) {
   return (
     <div className="score-group">
@@ -1756,7 +1874,10 @@ function ScoreGroup({
       </div>
       {assessments.map((assessment) => (
         <div className="score-row" key={assessment.id}>
-          <span>{assessment.name}</span>
+          <span>
+            {assessment.name}
+            {weighted && assessment.weight ? <em className="weight-tag"> {assessment.weight}%</em> : null}
+          </span>
           <strong>
             {getGradeValue(traineeId, assessment.id, grades) || 0} / {assessment.maxScore}
           </strong>
@@ -1764,6 +1885,43 @@ function ScoreGroup({
       ))}
       {!assessments.length && <p className="muted">لم تضاف اختبارات لهذا النوع.</p>}
     </div>
+  );
+}
+
+function StatsPanel({ stats, maxTotal, weighted }: { stats: ClassStats; maxTotal: number; weighted: boolean }) {
+  return (
+    <section className="panel stats-panel" aria-label="إحصائيات الصف">
+      <div className="panel-head horizontal">
+        <div>
+          <p className="section-kicker">إحصائيات</p>
+          <h2>توزيع الدرجات وإحصائيات الصف</h2>
+          <span>{stats.passCount} ناجح ({stats.passRate}%) من أصل {stats.passCount + (stats.distribution.reduce((s, d) => s + d.count, 0) - stats.passCount)} متدرب — عتبة النجاح 60% من {maxTotal}</span>
+        </div>
+      </div>
+      <div className="stats-metrics">
+        <div className="stat-item"><span>المتوسط</span><strong>{stats.avg}</strong></div>
+        <div className="stat-item"><span>الوسيط</span><strong>{stats.median}</strong></div>
+        <div className="stat-item"><span>الانحراف المعياري</span><strong>{stats.stdDev}</strong></div>
+        <div className="stat-item"><span>الأعلى</span><strong>{stats.max}</strong></div>
+        <div className="stat-item"><span>الأدنى</span><strong>{stats.min}</strong></div>
+        {weighted && <div className="stat-item stat-note"><span>الأوزان مفعّلة</span><strong>من 100</strong></div>}
+      </div>
+      <div className="grade-distribution">
+        {stats.distribution.map((d) => (
+          <div key={d.label} className="dist-row">
+            <span className="dist-label">{d.label}</span>
+            <div className="dist-track">
+              <div
+                className="dist-bar"
+                style={{ width: `${Math.max(d.pct, d.count ? 2 : 0)}%`, background: d.color }}
+                title={`${d.count} متدرب`}
+              />
+            </div>
+            <span className="dist-count">{d.count}</span>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 

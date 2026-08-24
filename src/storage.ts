@@ -84,6 +84,7 @@ export async function loadWorkspace(userId: string): Promise<AppState> {
     kind: a.kind as "theory" | "practical",
     maxScore: a.max_score,
     date: a.date,
+    weight: a.weight ?? 0,
   }));
 
   const trainers: CourseTrainer[] = (trainersRes.data ?? []).map((ct) => ({
@@ -188,6 +189,7 @@ export async function saveWorkspace(userId: string, state: AppState): Promise<vo
         kind: a.kind,
         max_score: a.maxScore,
         date: a.date,
+        weight: a.weight ?? 0,
       }))
     );
     if (insertAssessmentsError) throw new Error("تعذّر حفظ بيانات الاختبارات.");

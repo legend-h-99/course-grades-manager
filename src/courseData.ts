@@ -11,8 +11,8 @@ export const starterState: AppState = {
   course: { name: "", kind: "theory", sectionNumber: "", savedAt: "", code: "" },
   trainees: [],
   assessments: [
-    { id: crypto.randomUUID(), name: "اختبار نظري 1", kind: "theory", maxScore: 20, date: today() },
-    { id: crypto.randomUUID(), name: "تقييم عملي 1", kind: "practical", maxScore: 30, date: today() }
+    { id: crypto.randomUUID(), name: "اختبار نظري 1", kind: "theory", maxScore: 20, date: today(), weight: 0 },
+    { id: crypto.randomUUID(), name: "تقييم عملي 1", kind: "practical", maxScore: 30, date: today(), weight: 0 }
   ],
   grades: []
 };
@@ -164,4 +164,89 @@ export function getTraineeTotals(traineeId: string, assessments: Assessment[], g
     .filter((grade) => grade.traineeId === traineeId && practicalIds.has(grade.assessmentId))
     .reduce((sum, grade) => sum + numberOrZero(grade.score), 0);
   return { theory, practical, total: theory + practical };
+}
+
+export function isWeightedMode(assessments: Assessment[]) {
+  return assessments.some((a) => (a.weight ?? 0) > 0);
+}
+
+export function getTraineeTotalsWeighted(traineeId: string, assessments: Assessment[], grades: Grade[]) {
+  if (!isWeightedMode(assessments)) return getTraineeTotals(traineeId, assessments, grades);
+  const theoryIds = new Set(assessments.filter((a) => a.kind === "theory").map((a) => a.id));
+  const practicalIds = new Set(assessments.filter((a) => a.kind === "practical").map((a) => a.id));
+  let theory = 0;
+  let practical = 0;
+  for (const assessment of assessments) {
+    const weight = assessment.weight ?? 0;
+    if (!weight) continue;
+    const score = numberOrZero(getGradeValue(traineeId, assessment.id, grades));
+    const contribution = assessment.maxScore > 0 ? (score / assessment.maxScore) * weight : 0;
+    if (theoryIds.has(assessment.id)) theory += contribution;
+    else if (practicalIds.has(assessment.id)) practical += contribution;
+  }
+  const round1 = (v: number) => Math.round(v * 10) / 10;
+  return { theory: round1(theory), practical: round1(practical), total: round1(theory + practical) };
+}
+
+export function getMaxPossibleTotal(assessments: Assessment[]) {
+  if (isWeightedMode(assessments)) return assessments.reduce((sum, a) => sum + (a.weight ?? 0), 0);
+  return assessments.reduce((sum, a) => sum + a.maxScore, 0);
+}
+
+export type ClassStats = {
+  avg: number;
+  median: number;
+  stdDev: number;
+  min: number;
+  max: number;
+  passCount: number;
+  passRate: number;
+  distribution: Array<{ label: string; count: number; pct: number; color: string }>;
+};
+
+export function getClassStats(trainees: Trainee[], assessments: Assessment[], grades: Grade[]): ClassStats | null {
+  if (!trainees.length) return null;
+  const weighted = isWeightedMode(assessments);
+  const totals = trainees.map((t) =>
+    weighted
+      ? getTraineeTotalsWeighted(t.id, assessments, grades).total
+      : getTraineeTotals(t.id, assessments, grades).total
+  );
+  const n = totals.length;
+  const avg = totals.reduce((s, v) => s + v, 0) / n;
+  const sorted = [...totals].sort((a, b) => a - b);
+  const median = n % 2 === 0 ? (sorted[n / 2 - 1] + sorted[n / 2]) / 2 : sorted[Math.floor(n / 2)];
+  const variance = totals.reduce((s, v) => s + (v - avg) ** 2, 0) / n;
+  const stdDev = Math.sqrt(variance);
+  const maxTotal = getMaxPossibleTotal(assessments);
+  const passThreshold = maxTotal > 0 ? maxTotal * 0.6 : 0;
+  const passCount = totals.filter((t) => t >= passThreshold).length;
+  const ranges = [
+    { label: "ممتاز", minPct: 85, maxPct: 101, color: "#1f6f61" },
+    { label: "جيد جداً", minPct: 75, maxPct: 85, color: "#2d9e7a" },
+    { label: "جيد", minPct: 65, maxPct: 75, color: "#e8a020" },
+    { label: "مقبول", minPct: 50, maxPct: 65, color: "#d4761f" },
+    { label: "ضعيف", minPct: 0, maxPct: 50, color: "#c0392b" },
+  ];
+  const distribution = ranges.map((range) => {
+    const count =
+      maxTotal > 0
+        ? totals.filter((t) => {
+            const pct = (t / maxTotal) * 100;
+            return pct >= range.minPct && pct < range.maxPct;
+          }).length
+        : 0;
+    return { label: range.label, count, pct: n > 0 ? (count / n) * 100 : 0, color: range.color };
+  });
+  const round1 = (v: number) => Math.round(v * 10) / 10;
+  return {
+    avg: round1(avg),
+    median: round1(median),
+    stdDev: round1(stdDev),
+    min: sorted[0],
+    max: sorted[n - 1],
+    passCount,
+    passRate: round1((passCount / n) * 100),
+    distribution,
+  };
 }

@@ -33,6 +33,7 @@ export type Assessment = {
   kind: AssessmentKind;
   maxScore: number;
   date: string;
+  weight: number; // 0 = unweighted (raw sum), >0 = contributes weight% to final score
 };
 
 export type Grade = {
