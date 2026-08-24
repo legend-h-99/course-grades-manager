@@ -615,6 +615,74 @@ textarea:focus-visible {
   min-height: 38px;
   padding: 0;
   font-weight: 900;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+/* Google sign-in button */
+.auth-google-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 46px;
+  border: 1.5px solid #dadce0;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #3c4043;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+  font-family: inherit;
+}
+
+.auth-google-btn:hover {
+  background: #f8f9fa;
+  border-color: #bfd5ce;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.auth-google-btn:focus-visible {
+  outline: 3px solid rgba(31, 111, 97, 0.14);
+  border-color: #1f6f61;
+}
+
+/* Divider between Google and email */
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #9aa6ac;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: #e0e6e9;
+}
+
+/* OTP 6-digit input */
+.otp-input {
+  text-align: center !important;
+  font-size: 24px !important;
+  font-weight: 900 !important;
+  letter-spacing: 10px !important;
+  direction: ltr !important;
+  padding: 10px 14px !important;
+}
+
+/* Optional label suffix */
+.label-optional {
+  font-weight: 400;
+  color: #9aa6ac;
+  font-size: 12px;
 }
 
 .locked-panel {
@@ -1623,4 +1691,123 @@ textarea {
   .trainee-sheet {
     width: 100%;
   }
+}
+
+/* ── Toast notifications ──────────────────────────────────────── */
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  pointer-events: none;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  min-width: 260px;
+  max-width: 420px;
+  box-shadow: 0 8px 24px rgba(23, 32, 42, 0.14);
+  animation: toastIn 240ms ease both;
+  pointer-events: all;
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.toast-success {
+  background: #1f6f61;
+  color: #ffffff;
+}
+
+.toast-error {
+  background: #c0392b;
+  color: #ffffff;
+}
+
+.toast-info {
+  background: #17202a;
+  color: #dbe7e3;
+}
+
+.toast-msg {
+  flex: 1;
+}
+
+.toast-close {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.toast-close:hover {
+  opacity: 1;
+}
+
+/* ── Button busy/disabled state ──────────────────────────────── */
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* ── Confirmation Dialog ─────────────────────────────────────── */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(23, 32, 42, 0.48);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9998;
+  animation: fadeIn 160ms ease both;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.confirm-dialog {
+  background: #ffffff;
+  border: 1px solid #dce3e7;
+  border-radius: 8px;
+  padding: 24px;
+  max-width: 420px;
+  width: calc(100% - 32px);
+  box-shadow: 0 18px 44px rgba(23, 32, 42, 0.14);
+  animation: fadeUp 200ms ease both;
+}
+
+.confirm-dialog p {
+  font-size: 15px;
+  color: #17202a;
+  margin: 0 0 20px;
+  line-height: 1.65;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
 }

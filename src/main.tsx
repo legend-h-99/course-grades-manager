@@ -1,4 +1,4 @@
-import React, { ChangeEvent, useCallback, useEffect, useMemo, useState } from "react";
+import React, { ChangeEvent, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   BarChart3,
@@ -52,6 +52,8 @@ import {
 } from "./storage";
 import type { AccountProfile, AppPage, AppState, Assessment, AssessmentKind, CourseSetup, Grade, SessionUser, Trainee, TrainerProfile } from "./types";
 
+type ToastItem = { id: string; message: string; type: "success" | "error" | "info" };
+
 function makeSessionUser(user: { id: string; email?: string; user_metadata?: Record<string, unknown> }): SessionUser {
   return {
     id: user.id,
@@ -84,17 +86,32 @@ function formatSavedAt(value: string) {
   }).format(new Date(value));
 }
 
+function ToastList({ items, onDismiss }: { items: ToastItem[]; onDismiss: (id: string) => void }) {
+  if (!items.length) return null;
+  return (
+    <div className="toast-container" aria-live="polite" aria-atomic="false">
+      {items.map((t) => (
+        <div key={t.id} className={`toast toast-${t.type}`} role="status">
+          <span className="toast-msg">{t.message}</span>
+          <button className="toast-close" onClick={() => onDismiss(t.id)} aria-label="إغلاق">✕</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function App() {
   const [state, setState] = useState<AppState>(starterState);
   const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [isBusy, setIsBusy] = useState(false);
   const [page, setPage] = useState<AppPage>(readInitialPage);
-  const [authMode, setAuthMode] = useState<"register" | "login">(
-    readInitialPage() === "login" ? "login" : "register"
-  );
-  const [authDraft, setAuthDraft] = useState({ fullName: "", email: "", password: "" });
+  const [authStep, setAuthStep] = useState<"start" | "otp-sent" | "profile-setup">("start");
+  const [authEmail, setAuthEmail] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const [profileDraft, setProfileDraft] = useState({ fullName: "", collegeName: "", departmentName: "", majorName: "", employeeNumber: "" });
   const [authMessage, setAuthMessage] = useState("");
-  const [storageMessage, setStorageMessage] = useState("");
   const [lastSavedAt, setLastSavedAt] = useState("");
   const [courseCodeQuery, setCourseCodeQuery] = useState("");
   const [courseLookupMessage, setCourseLookupMessage] = useState("");
@@ -108,6 +125,7 @@ function App() {
   const [manualNames, setManualNames] = useState("");
   const [isTraineeSheetOpen, setIsTraineeSheetOpen] = useState(false);
   const [importMessage, setImportMessage] = useState("");
+  const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const [assessmentDraft, setAssessmentDraft] = useState({
     name: "",
     kind: "theory" as AssessmentKind,
@@ -115,19 +133,59 @@ function App() {
     date: today()
   });
 
+  const isInitializedRef = useRef(false);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currentUserRef = useRef<SessionUser | null>(null);
+  const stateRef = useRef<AppState>(starterState);
+  const isBusyRef = useRef(false);
+
+  useEffect(() => { currentUserRef.current = currentUser; }, [currentUser]);
+  useEffect(() => { stateRef.current = state; }, [state]);
+  useEffect(() => { isBusyRef.current = isBusy; }, [isBusy]);
+
+  useEffect(() => {
+    if (!isInitializedRef.current) return;
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(async () => {
+      const user = currentUserRef.current;
+      const s = stateRef.current;
+      if (!user || !s.course.code || isBusyRef.current) return;
+      try {
+        const nextState = withCourseTrainer(user.id, s);
+        await saveWorkspace(user.id, nextState);
+        setLastSavedAt(new Date().toISOString());
+        toast("تم الحفظ التلقائي.", "success");
+      } catch {
+        // silent — manual save still available
+      }
+    }, 3 * 60 * 1000);
+    return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.trainees, state.assessments, state.grades]);
+
   // Bootstrap Supabase auth session on mount
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    async function init() {
+      const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         const sessionUser = makeSessionUser(session.user);
         setCurrentUser(sessionUser);
-        const workspace = await loadWorkspace(session.user.id);
-        setState(workspace);
-        setLastSavedAt(workspace.course.savedAt);
-        goTo("app");
+        const { data: profile } = await supabase.from("profiles").select("id").eq("id", session.user.id).single();
+        if (!profile) {
+          setProfileDraft(d => ({ ...d, fullName: sessionUser.fullName || "" }));
+          setAuthStep("profile-setup");
+          goTo("login");
+        } else {
+          const workspace = await loadWorkspace(session.user.id);
+          setState(workspace);
+          setLastSavedAt(workspace.course.savedAt);
+          goTo("app");
+        }
       }
       setIsLoading(false);
-    });
+      setTimeout(() => { isInitializedRef.current = true; }, 0);
+    }
+    init();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === "SIGNED_IN" && session?.user) {
@@ -135,6 +193,7 @@ function App() {
       } else if (event === "SIGNED_OUT") {
         setCurrentUser(null);
         setState(starterState);
+        setAuthStep("start");
       }
     });
 
@@ -150,7 +209,6 @@ function App() {
     const handleLocationChange = () => {
       const nextPage = readInitialPage();
       setPage(nextPage);
-      if (nextPage === "login" || nextPage === "register") setAuthMode(nextPage);
     };
     window.addEventListener("popstate", handleLocationChange);
     window.addEventListener("hashchange", handleLocationChange);
@@ -161,20 +219,29 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (currentUser && (page === "login" || page === "register")) {
+    if (currentUser && authStep !== "profile-setup" && (page === "login" || page === "register")) {
       goTo("app");
     }
-  }, [currentUser, page]);
+  }, [currentUser, page, authStep]);
+
+  function toast(message: string, type: ToastItem["type"] = "info") {
+    const id = crypto.randomUUID();
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4500);
+  }
+  function dismissToast(id: string) {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }
 
   function goTo(nextPage: AppPage) {
     setPage(nextPage);
-    if (nextPage === "login" || nextPage === "register") setAuthMode(nextPage);
     window.history.pushState(null, "", pagePath(nextPage));
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  const deferredQuery = useDeferredValue(query);
   const filteredTrainees = useMemo(() => {
-    const needle = query.trim().toLowerCase();
+    const needle = deferredQuery.trim().toLowerCase();
     if (!needle) return state.trainees;
     return state.trainees.filter((trainee) => {
       return (
@@ -182,7 +249,7 @@ function App() {
         trainee.trainingNumber.toLowerCase().includes(needle)
       );
     });
-  }, [query, state.trainees]);
+  }, [deferredQuery, state.trainees]);
 
   const activeCard = useMemo(() => {
     if (!activeCardId) return filteredTrainees[0] ?? null;
@@ -292,68 +359,106 @@ function App() {
   );
 
   async function saveSetup() {
-    if (!setupReady || !currentUser) return;
-    const courseCode = state.course.code || generateCourseCode([]);
-    const course = { ...state.course, code: courseCode, savedAt: new Date().toISOString() };
-    const nextStateBase = {
-      ...state,
-      course,
-      trainees: state.trainees.map((trainee) => applyCourseSection(trainee, course))
-    };
-    const nextState = withCourseTrainer(currentUser.id, nextStateBase);
-    setState(nextState);
-    await saveWorkspace(currentUser.id, nextState);
-    setLastSavedAt(new Date().toISOString());
-    setStorageMessage(`تم إنشاء رمز المقرر: ${courseCode}`);
+    if (!setupReady || !currentUser || isBusy) return;
+    setIsBusy(true);
+    try {
+      const courseCode = state.course.code || generateCourseCode([]);
+      const course = { ...state.course, code: courseCode, savedAt: new Date().toISOString() };
+      const nextStateBase = {
+        ...state,
+        course,
+        trainees: state.trainees.map((trainee) => applyCourseSection(trainee, course))
+      };
+      const nextState = withCourseTrainer(currentUser.id, nextStateBase);
+      setState(nextState);
+      await saveWorkspace(currentUser.id, nextState);
+      setLastSavedAt(new Date().toISOString());
+      toast(`تم إنشاء رمز المقرر: ${courseCode}`, "success");
+    } catch (err) {
+      toast((err as Error).message || "تعذّر حفظ الإعدادات.", "error");
+    } finally {
+      setIsBusy(false);
+    }
   }
 
-  async function registerUser() {
-    const fullName = authDraft.fullName.trim();
-    const email = authDraft.email.trim().toLowerCase();
-    const password = authDraft.password.trim();
-    if (!fullName || !email || password.length < 6) {
-      setAuthMessage("أدخل الاسم والبريد وكلمة مرور من 6 أحرف على الأقل.");
-      return;
-    }
-    setAuthMessage("جارٍ إنشاء الحساب...");
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { full_name: fullName } }
+  async function signInWithGoogle() {
+    setAuthMessage("جارٍ التوجيه إلى جوجل...");
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: window.location.origin }
     });
-    if (error) {
-      setAuthMessage(error.message);
-      return;
-    }
-    if (!data.user) {
-      setAuthMessage("تحقق من بريدك الإلكتروني لتفعيل الحساب.");
-      return;
-    }
-    const sessionUser: SessionUser = { id: data.user.id, email, fullName };
-    const nextState = withCourseTrainer(data.user.id, { ...starterState, trainer: { ...starterState.trainer, name: fullName } });
-    setCurrentUser(sessionUser);
-    setState(nextState);
-    setAuthMessage("تم إنشاء الحساب وتسجيل الدخول.");
-    setStorageMessage("تم إنشاء مساحة بيانات جديدة لهذا الحساب.");
-    goTo("app");
+    if (error) setAuthMessage(error.message);
   }
 
-  async function loginUser() {
-    const email = authDraft.email.trim().toLowerCase();
-    const password = authDraft.password.trim();
-    setAuthMessage("جارٍ تسجيل الدخول...");
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error || !data.user) {
-      setAuthMessage("بيانات الدخول غير صحيحة.");
+  async function sendEmailOtp() {
+    const email = authEmail.trim().toLowerCase();
+    if (!email) { setAuthMessage("أدخل البريد الإلكتروني أولاً."); return; }
+    setAuthMessage("جارٍ إرسال رمز التحقق...");
+    const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
+    if (error) { setAuthMessage(error.message); return; }
+    setAuthMessage("تم الإرسال! تحقق من بريدك الإلكتروني.");
+    setAuthStep("otp-sent");
+  }
+
+  async function verifyEmailOtp() {
+    const email = authEmail.trim().toLowerCase();
+    const token = otpCode.trim();
+    if (!token || token.length < 6) { setAuthMessage("أدخل رمز التحقق المكون من 6 أرقام."); return; }
+    setAuthMessage("جارٍ التحقق...");
+    const { data, error } = await supabase.auth.verifyOtp({ email, token, type: "email" });
+    if (error || !data.user) { setAuthMessage("الرمز غير صحيح أو انتهت صلاحيته."); return; }
+    const sessionUser = makeSessionUser(data.user);
+    setCurrentUser(sessionUser);
+    const { data: profile } = await supabase.from("profiles").select("id").eq("id", data.user.id).single();
+    if (!profile) {
+      setProfileDraft(d => ({ ...d, fullName: sessionUser.fullName || "" }));
+      setAuthStep("profile-setup");
+      setAuthMessage("");
+    } else {
+      const workspace = await loadWorkspace(data.user.id);
+      setState(workspace);
+      setLastSavedAt(workspace.course.savedAt);
+      goTo("app");
+    }
+  }
+
+  async function completeProfileSetup() {
+    if (!currentUser || isBusy) return;
+    const { fullName, collegeName, departmentName, majorName, employeeNumber } = profileDraft;
+    if (!fullName.trim() || !collegeName.trim() || !departmentName.trim()) {
+      setAuthMessage("أدخل الاسم الكامل والكلية والقسم على الأقل.");
       return;
     }
-    setCurrentUser(makeSessionUser(data.user));
-    const workspace = await loadWorkspace(data.user.id);
-    setState(workspace);
-    setLastSavedAt(workspace.course.savedAt);
-    setAuthMessage("تم تسجيل الدخول.");
-    setStorageMessage("تم استدعاء بيانات الحساب المحفوظة.");
-    goTo("app");
+    setIsBusy(true);
+    setAuthMessage("جارٍ حفظ البيانات...");
+    try {
+      if (fullName.trim() !== currentUser.fullName) {
+        await supabase.auth.updateUser({ data: { full_name: fullName.trim() } });
+        setCurrentUser({ ...currentUser, fullName: fullName.trim() });
+      }
+      const { error } = await supabase.from("profiles").upsert({
+        id: currentUser.id,
+        college_name: collegeName.trim(),
+        department_name: departmentName.trim(),
+        major_name: majorName.trim(),
+        trainer_name: fullName.trim(),
+        employee_number: employeeNumber.trim()
+      }, { onConflict: "id" });
+      if (error) throw new Error("تعذّر حفظ بيانات الملف الشخصي.");
+      setState({
+        ...starterState,
+        account: { collegeName: collegeName.trim(), departmentName: departmentName.trim(), majorName: majorName.trim() },
+        trainer: { name: fullName.trim(), employeeNumber: employeeNumber.trim() }
+      });
+      setAuthStep("start");
+      setAuthMessage("");
+      goTo("app");
+      toast("مرحباً! تم إعداد حسابك بنجاح.", "success");
+    } catch (err) {
+      setAuthMessage((err as Error).message || "حدث خطأ أثناء الحفظ.");
+    } finally {
+      setIsBusy(false);
+    }
   }
 
   async function logoutUser() {
@@ -361,26 +466,42 @@ function App() {
     setCurrentUser(null);
     setState(starterState);
     setLastSavedAt("");
-    setAuthMessage("تم تسجيل الخروج.");
-    setStorageMessage("");
+    setAuthStep("start");
+    setAuthEmail("");
+    setOtpCode("");
+    setAuthMessage("");
     goTo("login");
   }
 
   async function saveNow() {
-    if (!currentUser) return;
-    const nextState = withCourseTrainer(currentUser.id, state);
-    setState(nextState);
-    await saveWorkspace(currentUser.id, nextState);
-    setLastSavedAt(new Date().toISOString());
-    setStorageMessage("تم حفظ البيانات الحالية.");
+    if (!currentUser || isBusy) return;
+    setIsBusy(true);
+    try {
+      const nextState = withCourseTrainer(currentUser.id, state);
+      setState(nextState);
+      await saveWorkspace(currentUser.id, nextState);
+      setLastSavedAt(new Date().toISOString());
+      toast("تم حفظ البيانات بنجاح.", "success");
+    } catch (err) {
+      toast((err as Error).message || "تعذّر حفظ البيانات.", "error");
+    } finally {
+      setIsBusy(false);
+    }
   }
 
   async function restoreWorkspace() {
-    if (!currentUser) return;
-    const workspace = await loadWorkspace(currentUser.id);
-    setState(workspace);
-    setLastSavedAt(workspace.course.savedAt);
-    setStorageMessage("تم استدعاء آخر نسخة محفوظة لهذا الحساب.");
+    if (!currentUser || isBusy) return;
+    setIsBusy(true);
+    try {
+      const workspace = await loadWorkspace(currentUser.id);
+      setState(workspace);
+      setLastSavedAt(workspace.course.savedAt);
+      toast("تم استدعاء آخر نسخة محفوظة.", "success");
+    } catch (err) {
+      toast((err as Error).message || "تعذّر استدعاء البيانات.", "error");
+    } finally {
+      setIsBusy(false);
+    }
   }
 
   async function findCourseByCode() {
@@ -397,7 +518,7 @@ function App() {
   }
 
   async function joinCourseByCode() {
-    if (!currentUser || !courseLookup) return;
+    if (!currentUser || !courseLookup || isBusy) return;
     const alreadyJoined =
       state.course.code === courseLookup.code &&
       courseTrainers.some((trainer) => trainer.userId === currentUser.id);
@@ -405,25 +526,37 @@ function App() {
       setCourseLookupMessage("أنت مرتبط بهذا المقرر بالفعل.");
       return;
     }
-    await joinCourse(currentUser.id, courseLookup, state.trainer.name || currentUser.fullName, state.trainer.employeeNumber);
-    const workspace = await loadWorkspace(currentUser.id);
-    setState(workspace);
-    setLastSavedAt(workspace.course.savedAt);
-    setCourseLookupMessage("تم الانضمام للمقرر واستدعاء بياناته.");
-    setStorageMessage(`تم الانضمام للمقرر برمز ${courseLookup.code}.`);
-    setCourseLookup(null);
-    setCourseCodeQuery("");
+    setIsBusy(true);
+    try {
+      await joinCourse(currentUser.id, courseLookup, state.trainer.name || currentUser.fullName, state.trainer.employeeNumber);
+      const workspace = await loadWorkspace(currentUser.id);
+      setState(workspace);
+      setLastSavedAt(workspace.course.savedAt);
+      setCourseLookupMessage("تم الانضمام للمقرر.");
+      setCourseLookup(null);
+      setCourseCodeQuery("");
+      toast(`تم الانضمام للمقرر برمز ${courseLookup.code}.`, "success");
+    } catch (err) {
+      toast((err as Error).message || "تعذّر الانضمام للمقرر.", "error");
+    } finally {
+      setIsBusy(false);
+    }
   }
 
   async function copyCourseCode() {
     if (!state.course.code) return;
     await navigator.clipboard.writeText(state.course.code);
-    setStorageMessage("تم نسخ رمز المقرر.");
+    toast("تم نسخ رمز المقرر.", "info");
   }
 
   async function importTrainees(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      toast("حجم الملف أكبر من 10MB. يُرجى تقليص الملف.", "error");
+      event.target.value = "";
+      return;
+    }
     setImportMessage("");
 
     try {
@@ -526,71 +659,65 @@ function App() {
       return traineeSection.trim() === exportSectionNumber;
     });
     if (!traineesForExport.length) return;
-
-    const headers = [
-      "اسم الكلية",
-      "القسم",
-      "التخصص",
-      "اسم المدرب",
-      "الرقم الوظيفي",
-      "مدربو المقرر",
-      "اسم المقرر",
-      "رمز المقرر",
-      "نوع الشعبة",
-      "رقم الشعبة",
-      "الرقم التدريبي",
-      "اسم المتدرب",
-      "الشعبة النظرية",
-      "الشعبة العملية",
-      "مجموع النظري",
-      "مجموع العملي",
-      "المجموع الكامل",
-      ...state.assessments.map((assessment) => assessment.name)
-    ];
-    const rows = traineesForExport.map((trainee) => {
-      const totals = getTraineeTotals(trainee.id, state.assessments, state.grades);
-      return [
-        state.account.collegeName,
-        state.account.departmentName,
-        state.account.majorName,
-        state.trainer.name,
-        state.trainer.employeeNumber,
-        courseTrainers.map((trainer) => trainer.name || "مدرب بدون اسم").join("، "),
-        state.course.name,
-        state.course.code,
-        kindLabel(state.course.kind),
-        state.course.sectionNumber,
-        trainee.trainingNumber,
-        trainee.name,
-        trainee.theorySection,
-        trainee.practicalSection,
-        totals.theory,
-        totals.practical,
-        totals.total,
-        ...state.assessments.map((assessment) => getGradeValue(trainee.id, assessment.id, state.grades) || 0)
+    setIsBusy(true);
+    try {
+      const headers = [
+        "اسم الكلية", "القسم", "التخصص", "اسم المدرب", "الرقم الوظيفي",
+        "مدربو المقرر", "اسم المقرر", "رمز المقرر", "نوع الشعبة", "رقم الشعبة",
+        "الرقم التدريبي", "اسم المتدرب", "الشعبة النظرية", "الشعبة العملية",
+        "مجموع النظري", "مجموع العملي", "المجموع الكامل",
+        ...state.assessments.map((assessment) => assessment.name)
       ];
-    });
-    const sheetData: SheetData = [
-      headers.map((value) => ({ value, fontWeight: "bold" })),
-      ...rows.map((row) => row.map((value) => ({ value })))
-    ];
-    const sectionSuffix =
-      exportSectionKind === "all"
-        ? "كل-الشعب"
-        : `${kindLabel(exportSectionKind)}-${exportSectionNumber || "كل-الشعب"}`;
-    await writeXlsxFile(sheetData).toFile(`درجات-${state.course.name || "المقرر"}-${sectionSuffix}-${today()}.xlsx`);
+      const rows = traineesForExport.map((trainee) => {
+        const totals = getTraineeTotals(trainee.id, state.assessments, state.grades);
+        return [
+          state.account.collegeName, state.account.departmentName, state.account.majorName,
+          state.trainer.name, state.trainer.employeeNumber,
+          courseTrainers.map((trainer) => trainer.name || "مدرب بدون اسم").join("، "),
+          state.course.name, state.course.code, kindLabel(state.course.kind), state.course.sectionNumber,
+          trainee.trainingNumber, trainee.name, trainee.theorySection, trainee.practicalSection,
+          totals.theory, totals.practical, totals.total,
+          ...state.assessments.map((assessment) => getGradeValue(trainee.id, assessment.id, state.grades) || 0)
+        ];
+      });
+      const sheetData: SheetData = [
+        headers.map((value) => ({ value, fontWeight: "bold" })),
+        ...rows.map((row) => row.map((value) => ({ value })))
+      ];
+      const sectionSuffix =
+        exportSectionKind === "all"
+          ? "كل-الشعب"
+          : `${kindLabel(exportSectionKind)}-${exportSectionNumber || "كل-الشعب"}`;
+      await writeXlsxFile(sheetData).toFile(`درجات-${state.course.name || "المقرر"}-${sectionSuffix}-${today()}.xlsx`);
+      toast(`تم تصدير ${traineesForExport.length} متدرب بنجاح.`, "success");
+    } catch (err) {
+      toast((err as Error).message || "تعذّر تصدير الملف.", "error");
+    } finally {
+      setIsBusy(false);
+    }
   }
 
-  async function resetAll() {
-    const confirmed = window.confirm("سيتم مسح بيانات المقرر الحالي. هل تريد المتابعة؟");
-    if (confirmed && currentUser) {
-      await clearWorkspace(currentUser.id);
-      setState(starterState);
-      setActiveCardId(null);
-      setManualNames("");
-      setImportMessage("");
-      setStorageMessage("تم مسح بيانات مساحة العمل الحالية.");
-    }
+  function resetAll() {
+    if (!currentUser || isBusy) return;
+    setConfirmDialog({
+      message: "سيتم مسح بيانات المقرر الحالي ومغادرة المقرر. هل تريد المتابعة؟",
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        setIsBusy(true);
+        try {
+          await clearWorkspace(currentUser.id);
+          setState(starterState);
+          setActiveCardId(null);
+          setManualNames("");
+          setImportMessage("");
+          toast("تم مسح بيانات المقرر.", "info");
+        } catch (err) {
+          toast((err as Error).message || "تعذّر مسح البيانات.", "error");
+        } finally {
+          setIsBusy(false);
+        }
+      }
+    });
   }
 
   if (isLoading) {
@@ -633,11 +760,11 @@ function App() {
           )}
           {currentUser && (
             <>
-              <button className="button" onClick={saveNow}>
+              <button className="button" onClick={saveNow} disabled={isBusy}>
                 <Save size={18} />
                 حفظ
               </button>
-              <button className="button" onClick={restoreWorkspace}>
+              <button className="button" onClick={restoreWorkspace} disabled={isBusy}>
                 <RefreshCw size={18} />
                 استدعاء
               </button>
@@ -749,15 +876,21 @@ function App() {
         </section>
       )}
 
-      {!currentUser && (page === "register" || page === "login") && (
+      {(authStep === "profile-setup" || (!currentUser && (page === "register" || page === "login"))) && (
         <AuthPanel
-          mode={authMode}
-          draft={authDraft}
+          step={authStep}
+          email={authEmail}
+          otpCode={otpCode}
+          profileDraft={profileDraft}
           message={authMessage}
-          onModeChange={setAuthMode}
-          onDraftChange={setAuthDraft}
-          onRegister={registerUser}
-          onLogin={loginUser}
+          onEmailChange={setAuthEmail}
+          onOtpChange={setOtpCode}
+          onProfileDraftChange={setProfileDraft}
+          onGoogleSignIn={signInWithGoogle}
+          onSendOtp={sendEmailOtp}
+          onVerifyOtp={verifyEmailOtp}
+          onCompleteProfile={completeProfileSetup}
+          onBackToStart={() => { setAuthStep("start"); setAuthMessage(""); setOtpCode(""); }}
         />
       )}
 
@@ -768,14 +901,13 @@ function App() {
           <p className="section-kicker">حفظ واستدعاء</p>
           <h2>بيانات هذا الحساب محفوظة في قاعدة بيانات سحابية</h2>
           <span>آخر حفظ: {formatSavedAt(lastSavedAt || state.course.savedAt)}</span>
-          {storageMessage && <strong>{storageMessage}</strong>}
         </div>
         <div className="storage-actions">
-          <button className="button primary" onClick={saveNow}>
+          <button className="button primary" onClick={saveNow} disabled={isBusy}>
             <Database size={18} />
             حفظ البيانات
           </button>
-          <button className="button" onClick={restoreWorkspace}>
+          <button className="button" onClick={restoreWorkspace} disabled={isBusy}>
             <RefreshCw size={18} />
             استدعاء آخر حفظ
           </button>
@@ -1324,76 +1456,200 @@ function App() {
           </div>
         </section>
       ) : null}
+      <ToastList items={toasts} onDismiss={dismissToast} />
+      {confirmDialog && (
+        <ConfirmDialog
+          message={confirmDialog.message}
+          onConfirm={confirmDialog.onConfirm}
+          onCancel={() => setConfirmDialog(null)}
+        />
+      )}
     </main>
   );
 }
 
+function ConfirmDialog({ message, onConfirm, onCancel }: { message: string; onConfirm: () => void; onCancel: () => void }) {
+  return (
+    <div className="confirm-overlay" onClick={onCancel} role="presentation">
+      <div className="confirm-dialog" onClick={(e) => e.stopPropagation()} role="alertdialog" aria-modal="true">
+        <p>{message}</p>
+        <div className="confirm-actions">
+          <button className="button" onClick={onCancel}>إلغاء</button>
+          <button className="button primary" onClick={onConfirm}>تأكيد</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const GoogleIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
+    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+  </svg>
+);
+
+type ProfileDraft = { fullName: string; collegeName: string; departmentName: string; majorName: string; employeeNumber: string };
+
 function AuthPanel({
-  mode,
-  draft,
+  step,
+  email,
+  otpCode,
+  profileDraft,
   message,
-  onModeChange,
-  onDraftChange,
-  onRegister,
-  onLogin
+  onEmailChange,
+  onOtpChange,
+  onProfileDraftChange,
+  onGoogleSignIn,
+  onSendOtp,
+  onVerifyOtp,
+  onCompleteProfile,
+  onBackToStart
 }: {
-  mode: "register" | "login";
-  draft: { fullName: string; email: string; password: string };
+  step: "start" | "otp-sent" | "profile-setup";
+  email: string;
+  otpCode: string;
+  profileDraft: ProfileDraft;
   message: string;
-  onModeChange: (mode: "register" | "login") => void;
-  onDraftChange: (draft: { fullName: string; email: string; password: string }) => void;
-  onRegister: () => void;
-  onLogin: () => void;
+  onEmailChange: (v: string) => void;
+  onOtpChange: (v: string) => void;
+  onProfileDraftChange: (d: ProfileDraft) => void;
+  onGoogleSignIn: () => void;
+  onSendOtp: () => void;
+  onVerifyOtp: () => void;
+  onCompleteProfile: () => void;
+  onBackToStart: () => void;
 }) {
-  const isRegister = mode === "register";
+  const copyMap = {
+    "start": {
+      kicker: "البدء",
+      title: "تسجيل الدخول أو إنشاء حساب",
+      desc: "سجّل الدخول بحساب جوجل أو أدخل بريدك لاستلام رمز تحقق. لا حاجة لكلمة مرور."
+    },
+    "otp-sent": {
+      kicker: "التحقق",
+      title: "أدخل رمز التحقق",
+      desc: `تم إرسال رمز مكوّن من 6 أرقام إلى ${email}. تحقق من صندوق الوارد.`
+    },
+    "profile-setup": {
+      kicker: "إعداد الحساب",
+      title: "أكمل بيانات حسابك",
+      desc: "أدخل بياناتك حتى تُحفظ مساحة العمل على اسمك في السحابة، ثم يمكنك إضافة المقرر والمتدربين."
+    }
+  };
+  const { kicker, title, desc } = copyMap[step];
+
   return (
     <section className="auth-panel" id="auth">
       <div className="auth-copy">
-        <p className="section-kicker">البدء</p>
-        <h2>{isRegister ? "إنشاء حساب جديد" : "تسجيل الدخول"}</h2>
-        <p>ابدأ بحساب المدرب حتى يتم حفظ مساحة العمل على السحابة، ثم أكمل بيانات المقرر والمتدربين.</p>
+        <p className="section-kicker">{kicker}</p>
+        <h2>{title}</h2>
+        <p>{desc}</p>
       </div>
       <div className="auth-form">
-        {isRegister && (
-          <label>
-            اسم المستخدم
-            <input
-              value={draft.fullName}
-              placeholder="اسم المدرب"
-              onChange={(event) => onDraftChange({ ...draft, fullName: event.target.value })}
-            />
-          </label>
+        {step === "start" && (
+          <>
+            <button type="button" className="auth-google-btn" onClick={onGoogleSignIn}>
+              <GoogleIcon />
+              المتابعة بحساب جوجل
+            </button>
+            <div className="auth-divider"><span>أو</span></div>
+            <label>
+              البريد الإلكتروني
+              <input
+                type="email"
+                value={email}
+                placeholder="name@example.com"
+                autoComplete="email"
+                onChange={(e) => onEmailChange(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && onSendOtp()}
+              />
+            </label>
+            {message && <p className="auth-message">{message}</p>}
+            <button className="button primary" onClick={onSendOtp}>
+              <LogIn size={18} />
+              إرسال رمز التحقق
+            </button>
+          </>
         )}
-        <label>
-          البريد الإلكتروني
-          <input
-            type="email"
-            value={draft.email}
-            placeholder="name@example.com"
-            onChange={(event) => onDraftChange({ ...draft, email: event.target.value })}
-          />
-        </label>
-        <label>
-          كلمة المرور
-          <input
-            type="password"
-            value={draft.password}
-            placeholder="6 أحرف على الأقل"
-            onChange={(event) => onDraftChange({ ...draft, password: event.target.value })}
-          />
-        </label>
-        {message && <p className="auth-message">{message}</p>}
-        <button className="button primary" onClick={isRegister ? onRegister : onLogin}>
-          {isRegister ? <UserPlus size={18} /> : <LogIn size={18} />}
-          {isRegister ? "إنشاء الحساب" : "تسجيل الدخول"}
-        </button>
-        <button
-          type="button"
-          className="auth-switch"
-          onClick={() => onModeChange(isRegister ? "login" : "register")}
-        >
-          {isRegister ? "لديك حساب؟ تسجيل الدخول" : "ليس لديك حساب؟ إنشاء حساب"}
-        </button>
+        {step === "otp-sent" && (
+          <>
+            <label>
+              رمز التحقق
+              <input
+                className="otp-input"
+                value={otpCode}
+                placeholder="000000"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                autoFocus
+                onChange={(e) => onOtpChange(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                onKeyDown={(e) => e.key === "Enter" && onVerifyOtp()}
+              />
+            </label>
+            {message && <p className="auth-message">{message}</p>}
+            <button className="button primary" onClick={onVerifyOtp}>
+              <ShieldCheck size={18} />
+              تحقق من الرمز
+            </button>
+            <button type="button" className="auth-switch" onClick={onBackToStart}>
+              تغيير البريد أو إعادة الإرسال
+            </button>
+          </>
+        )}
+        {step === "profile-setup" && (
+          <>
+            <label>
+              الاسم الكامل
+              <input
+                value={profileDraft.fullName}
+                placeholder="اسم المدرب"
+                autoComplete="name"
+                onChange={(e) => onProfileDraftChange({ ...profileDraft, fullName: e.target.value })}
+              />
+            </label>
+            <label>
+              الكلية أو الجهة
+              <input
+                value={profileDraft.collegeName}
+                placeholder="كلية التقنية"
+                onChange={(e) => onProfileDraftChange({ ...profileDraft, collegeName: e.target.value })}
+              />
+            </label>
+            <label>
+              القسم
+              <input
+                value={profileDraft.departmentName}
+                placeholder="قسم تقنية المعلومات"
+                onChange={(e) => onProfileDraftChange({ ...profileDraft, departmentName: e.target.value })}
+              />
+            </label>
+            <label>
+              التخصص <span className="label-optional">(اختياري)</span>
+              <input
+                value={profileDraft.majorName}
+                placeholder="التخصص"
+                onChange={(e) => onProfileDraftChange({ ...profileDraft, majorName: e.target.value })}
+              />
+            </label>
+            <label>
+              الرقم الوظيفي <span className="label-optional">(اختياري)</span>
+              <input
+                value={profileDraft.employeeNumber}
+                placeholder="الرقم الوظيفي"
+                onChange={(e) => onProfileDraftChange({ ...profileDraft, employeeNumber: e.target.value })}
+              />
+            </label>
+            {message && <p className="auth-message">{message}</p>}
+            <button className="button primary" onClick={onCompleteProfile}>
+              <CheckCircle2 size={18} />
+              حفظ والمتابعة
+            </button>
+          </>
+        )}
       </div>
     </section>
   );
