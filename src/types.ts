@@ -16,6 +16,8 @@ export type CourseSetup = {
   kind: AssessmentKind;
   sectionNumber: string;
   savedAt: string;
+  updatedAt: string;
+  inviteCode: string;
   code: string;
 };
 

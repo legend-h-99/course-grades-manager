@@ -8,7 +8,7 @@ export const starterState: AppState = {
   account: { collegeName: "", departmentName: "", majorName: "" },
   trainer: { name: "", employeeNumber: "" },
   trainers: [],
-  course: { name: "", kind: "theory", sectionNumber: "", savedAt: "", code: "" },
+  course: { name: "", kind: "theory", sectionNumber: "", savedAt: "", updatedAt: "", inviteCode: "", code: "" },
   trainees: [],
   assessments: [
     { id: crypto.randomUUID(), name: "اختبار نظري 1", kind: "theory", maxScore: 20, date: today(), weight: 0 },

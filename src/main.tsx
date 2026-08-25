@@ -21,9 +21,6 @@ import {
   UserPlus,
   Users
 } from "lucide-react";
-import { readSheet } from "read-excel-file/browser";
-import writeXlsxFile from "write-excel-file/browser";
-import type { SheetData } from "write-excel-file/browser";
 import {
   applyCourseSection,
   generateCourseCode,
@@ -37,8 +34,6 @@ import {
   mapRowsToTrainees,
   normalizeCourseCode,
   numberOrZero,
-  parseCsv,
-  rowsToObjects,
   starterState,
   today,
   trainerEntry,
@@ -55,6 +50,8 @@ import {
   saveWorkspace,
   type CoursePreview
 } from "./storage";
+import { exportGradesWorkbook, readTraineeRows } from "./excel";
+import { buildTraineeReportHtml } from "./reporting";
 import type { AccountProfile, AppPage, AppState, Assessment, AssessmentKind, CourseSetup, Grade, SessionUser, Trainee, TrainerProfile } from "./types";
 
 type ToastItem = { id: string; message: string; type: "success" | "error" | "info" };
@@ -160,7 +157,10 @@ function App() {
       if (!user || !s.course.code || isBusyRef.current) return;
       try {
         const nextState = withCourseTrainer(user.id, s);
-        await saveWorkspace(user.id, nextState);
+        const saveResult = await saveWorkspace(user.id, nextState);
+        if (saveResult) {
+          setState((current) => ({ ...current, course: { ...current.course, ...saveResult } }));
+        }
         setLastSavedAt(new Date().toISOString());
         toast("تم الحفظ التلقائي.", "success");
       } catch {
@@ -402,7 +402,10 @@ function App() {
       };
       const nextState = withCourseTrainer(currentUser.id, nextStateBase);
       setState(nextState);
-      await saveWorkspace(currentUser.id, nextState);
+      const saveResult = await saveWorkspace(currentUser.id, nextState);
+      if (saveResult) {
+        setState((current) => ({ ...current, course: { ...current.course, ...saveResult } }));
+      }
       setLastSavedAt(new Date().toISOString());
       toast(`تم إنشاء رمز المقرر: ${courseCode}`, "success");
     } catch (err) {
@@ -588,7 +591,10 @@ function App() {
     try {
       const nextState = withCourseTrainer(currentUser.id, state);
       setState(nextState);
-      await saveWorkspace(currentUser.id, nextState);
+      const saveResult = await saveWorkspace(currentUser.id, nextState);
+      if (saveResult) {
+        setState((current) => ({ ...current, course: { ...current.course, ...saveResult } }));
+      }
       setLastSavedAt(new Date().toISOString());
       toast("تم حفظ البيانات بنجاح.", "success");
     } catch (err) {
@@ -623,13 +629,13 @@ function App() {
     setCourseLookupMessage("جارٍ البحث...");
     const record = await dbFindCourseByCode(code);
     setCourseLookup(record);
-    setCourseLookupMessage(record ? "تم العثور على المقرر." : "لم يتم العثور على مقرر بهذا الرمز.");
+    setCourseLookupMessage(record ? "تم العثور على رمز المقرر. يمكنك الانضمام ثم ستظهر بياناته كاملة." : "لم يتم العثور على مقرر بهذا الرمز.");
   }
 
   async function joinCourseByCode() {
     if (!currentUser || !courseLookup || isBusy) return;
     const alreadyJoined =
-      state.course.code === courseLookup.code &&
+      (state.course.inviteCode || state.course.code) === courseLookup.code &&
       courseTrainers.some((trainer) => trainer.userId === currentUser.id);
     if (alreadyJoined) {
       setCourseLookupMessage("أنت مرتبط بهذا المقرر بالفعل.");
@@ -653,8 +659,9 @@ function App() {
   }
 
   async function copyCourseCode() {
-    if (!state.course.code) return;
-    await navigator.clipboard.writeText(state.course.code);
+    const inviteCode = state.course.inviteCode || state.course.code;
+    if (!inviteCode) return;
+    await navigator.clipboard.writeText(inviteCode);
     toast("تم نسخ رمز المقرر.", "info");
   }
 
@@ -669,10 +676,7 @@ function App() {
     setImportMessage("");
 
     try {
-      const rows =
-        file.name.toLowerCase().endsWith(".csv")
-          ? parseCsv(await file.text())
-          : rowsToObjects((await readSheet(file)) as unknown[][]);
+      const rows = await readTraineeRows(file);
       const trainees = mapRowsToTrainees(rows, state.course);
 
       setState((current) => ({ ...current, trainees, grades: [] }));
@@ -771,34 +775,13 @@ function App() {
     if (!traineesForExport.length) return;
     setIsBusy(true);
     try {
-      const headers = [
-        "اسم الكلية", "القسم", "التخصص", "اسم المدرب", "الرقم الوظيفي",
-        "مدربو المقرر", "اسم المقرر", "رمز المقرر", "نوع الشعبة", "رقم الشعبة",
-        "الرقم التدريبي", "اسم المتدرب", "الشعبة النظرية", "الشعبة العملية",
-        "مجموع النظري", "مجموع العملي", "المجموع الكامل",
-        ...state.assessments.map((assessment) => assessment.name)
-      ];
-      const rows = traineesForExport.map((trainee) => {
-        const totals = getTraineeTotals(trainee.id, state.assessments, state.grades);
-        return [
-          state.account.collegeName, state.account.departmentName, state.account.majorName,
-          state.trainer.name, state.trainer.employeeNumber,
-          courseTrainers.map((trainer) => trainer.name || "مدرب بدون اسم").join("، "),
-          state.course.name, state.course.code, kindLabel(state.course.kind), state.course.sectionNumber,
-          trainee.trainingNumber, trainee.name, trainee.theorySection, trainee.practicalSection,
-          totals.theory, totals.practical, totals.total,
-          ...state.assessments.map((assessment) => getGradeValue(trainee.id, assessment.id, state.grades) || 0)
-        ];
+      await exportGradesWorkbook({
+        state,
+        trainees: traineesForExport,
+        courseTrainers,
+        sectionKind: exportSectionKind,
+        sectionNumber: exportSectionNumber,
       });
-      const sheetData: SheetData = [
-        headers.map((value) => ({ value, fontWeight: "bold" })),
-        ...rows.map((row) => row.map((value) => ({ value })))
-      ];
-      const sectionSuffix =
-        exportSectionKind === "all"
-          ? "كل-الشعب"
-          : `${kindLabel(exportSectionKind)}-${exportSectionNumber || "كل-الشعب"}`;
-      await writeXlsxFile(sheetData).toFile(`درجات-${state.course.name || "المقرر"}-${sectionSuffix}-${today()}.xlsx`);
       toast(`تم تصدير ${traineesForExport.length} متدرب بنجاح.`, "success");
     } catch (err) {
       toast((err as Error).message || "تعذّر تصدير الملف.", "error");
@@ -833,52 +816,7 @@ function App() {
   function printTraineeReport(trainee: Trainee) {
     const win = window.open("", "_blank", "width=680,height=900");
     if (!win) { toast("لم يتمكن المتصفح من فتح نافذة الطباعة.", "error"); return; }
-    const t = weighted
-      ? getTraineeTotalsWeighted(trainee.id, state.assessments, state.grades)
-      : getTraineeTotals(trainee.id, state.assessments, state.grades);
-    const theoryRows = state.assessments
-      .filter((a) => a.kind === "theory")
-      .map((a) => {
-        const score = getGradeValue(trainee.id, a.id, state.grades);
-        const contrib = weighted && a.weight ? `(${a.weight}%)` : "";
-        return `<tr><td>${a.name} ${contrib}</td><td>${score === "" ? "-" : score} / ${a.maxScore}</td></tr>`;
-      })
-      .join("");
-    const practicalRows = state.assessments
-      .filter((a) => a.kind === "practical")
-      .map((a) => {
-        const score = getGradeValue(trainee.id, a.id, state.grades);
-        const contrib = weighted && a.weight ? `(${a.weight}%)` : "";
-        return `<tr><td>${a.name} ${contrib}</td><td>${score === "" ? "-" : score} / ${a.maxScore}</td></tr>`;
-      })
-      .join("");
-    win.document.write(`<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8">
-<title>تقرير ${trainee.name}</title><style>
-body{font-family:"Segoe UI",Tahoma,Arial,sans-serif;direction:rtl;padding:32px;color:#17202a;max-width:560px;margin:auto;}
-h1{color:#1f6f61;margin:0 0 4px;}
-.sub{color:#607077;font-size:14px;margin:0 0 24px;}
-table{width:100%;border-collapse:collapse;margin:12px 0 20px;}
-th{background:#f7f9fa;padding:8px 12px;text-align:right;font-size:12px;color:#445158;border-bottom:2px solid #dce3e7;}
-td{padding:8px 12px;border-bottom:1px solid #e0e6e9;font-size:14px;}
-.sec{font-size:13px;font-weight:900;color:#1f6f61;margin:16px 0 4px;}
-.total{background:#e8f3ee;border-radius:8px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;margin-top:16px;}
-.total span{font-size:14px;color:#607077;}
-.total strong{font-size:26px;color:#1f6f61;font-weight:900;}
-@media print{button{display:none!important;}}
-</style></head><body>
-<button onclick="window.print()" style="margin-bottom:16px;padding:8px 16px;background:#1f6f61;color:#fff;border:0;border-radius:6px;cursor:pointer;font-size:14px;">طباعة / PDF</button>
-<h1>تقرير متدرب</h1>
-<p class="sub">${state.account.collegeName}${state.account.collegeName && state.course.name ? " — " : ""}${state.course.name}</p>
-<table>
-<tr><th>الاسم</th><td>${trainee.name}</td></tr>
-<tr><th>الرقم التدريبي</th><td>${trainee.trainingNumber || "-"}</td></tr>
-<tr><th>الشعبة النظرية</th><td>${trainee.theorySection || "-"}</td></tr>
-<tr><th>الشعبة العملية</th><td>${trainee.practicalSection || "-"}</td></tr>
-</table>
-${theoryRows ? `<p class="sec">درجات النظري</p><table><tr><th>الاختبار</th><th>الدرجة</th></tr>${theoryRows}</table>` : ""}
-${practicalRows ? `<p class="sec">درجات العملي</p><table><tr><th>الاختبار</th><th>الدرجة</th></tr>${practicalRows}</table>` : ""}
-<div class="total"><span>المجموع${weighted ? " الموزون" : ""}</span><strong>${t.total}</strong></div>
-</body></html>`);
+    win.document.write(buildTraineeReportHtml(trainee, state, courseTrainers));
     win.document.close();
   }
 
@@ -1135,10 +1073,10 @@ ${practicalRows ? `<p class="sec">درجات العملي</p><table><tr><th>ال
         <div className="code-card">
           <div>
             <p className="section-kicker">رمز المقرر</p>
-            <h2>{state.course.code || "سيتم توليده بعد إنشاء المقرر"}</h2>
+            <h2>{state.course.inviteCode || state.course.code || "سيتم توليده بعد إنشاء المقرر"}</h2>
             <span>الرمز فريد ويتكون من حروف وأرقام. شاركه مع المدرب الآخر للبحث والانضمام لنفس المقرر.</span>
           </div>
-          <button className="button" onClick={copyCourseCode} disabled={!state.course.code}>
+          <button className="button" onClick={copyCourseCode} disabled={!(state.course.inviteCode || state.course.code)}>
             <Copy size={18} />
             نسخ الرمز
           </button>
@@ -1156,7 +1094,7 @@ ${practicalRows ? `<p class="sec">درجات العملي</p><table><tr><th>ال
         <div className="join-card">
           <div className="panel-head">
             <h2>البحث والانضمام برمز مقرر</h2>
-            <span>أدخل رمز المقرر، ثم راجع بيانات المقرر والمدربين قبل الانضمام.</span>
+            <span>أدخل رمز المقرر، ثم انضم للمقرر لعرض بياناته ومدربيه.</span>
           </div>
           <div className="join-form">
             <input
@@ -1173,22 +1111,8 @@ ${practicalRows ? `<p class="sec">درجات العملي</p><table><tr><th>ال
           {courseLookup && (
             <div className="course-result">
               <div>
-                <span>المقرر</span>
-                <strong>{courseLookup.name || "-"}</strong>
-              </div>
-              <div>
-                <span>النوع</span>
-                <strong>{kindLabel(courseLookup.kind)}</strong>
-              </div>
-              <div>
-                <span>الشعبة</span>
-                <strong>{courseLookup.sectionNumber || "-"}</strong>
-              </div>
-              <div className="trainers-list">
-                <span>المدربون</span>
-                <strong>
-                  {courseLookup.trainers.map((trainer) => trainer.name || "مدرب بدون اسم").join("، ")}
-                </strong>
+                <span>رمز المقرر</span>
+                <strong>{courseLookup.code}</strong>
               </div>
               <button className="button primary" onClick={joinCourseByCode}>
                 الانضمام لهذا المقرر
