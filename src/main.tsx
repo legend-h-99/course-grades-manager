@@ -112,8 +112,10 @@ function App() {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [isBusy, setIsBusy] = useState(false);
   const [page, setPage] = useState<AppPage>(readInitialPage);
-  const [authStep, setAuthStep] = useState<"start" | "otp-sent" | "profile-setup">("start");
+  const [authStep, setAuthStep] = useState<"start" | "otp-sent" | "password-reset" | "profile-setup">("start");
   const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [otpCode, setOtpCode] = useState("");
   const [profileDraft, setProfileDraft] = useState({ fullName: "", collegeName: "", departmentName: "", majorName: "", employeeNumber: "" });
   const [authMessage, setAuthMessage] = useState("");
@@ -194,7 +196,12 @@ function App() {
     init();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === "SIGNED_IN" && session?.user) {
+      if (event === "PASSWORD_RECOVERY" && session?.user) {
+        setCurrentUser(makeSessionUser(session.user));
+        setAuthStep("password-reset");
+        setAuthMessage("أدخل كلمة المرور الجديدة.");
+        goTo("login");
+      } else if (event === "SIGNED_IN" && session?.user) {
         setCurrentUser(makeSessionUser(session.user));
       } else if (event === "SIGNED_OUT") {
         setCurrentUser(null);
@@ -225,10 +232,15 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (currentUser && authStep !== "profile-setup" && (page === "login" || page === "register")) {
+    if (currentUser && authStep !== "profile-setup" && authStep !== "password-reset" && (page === "login" || page === "register")) {
       goTo("app");
     }
   }, [currentUser, page, authStep]);
+
+  useEffect(() => {
+    if (page === "login") setAuthMode("login");
+    if (page === "register") setAuthMode("register");
+  }, [page]);
 
   function toast(message: string, type: ToastItem["type"] = "info") {
     const id = crypto.randomUUID();
@@ -409,6 +421,94 @@ function App() {
     if (error) setAuthMessage(error.message);
   }
 
+  async function openAuthenticatedWorkspace(user: { id: string; email?: string; user_metadata?: Record<string, unknown> }) {
+    const sessionUser = makeSessionUser(user);
+    setCurrentUser(sessionUser);
+    const { data: profile } = await supabase.from("profiles").select("id").eq("id", user.id).single();
+    if (!profile) {
+      setProfileDraft(d => ({ ...d, fullName: sessionUser.fullName || "" }));
+      setAuthStep("profile-setup");
+      setAuthMessage("");
+      return;
+    }
+    const workspace = await loadWorkspace(user.id);
+    setState(workspace);
+    setLastSavedAt(workspace.course.savedAt);
+    setAuthMessage("");
+    goTo("app");
+  }
+
+  async function signInWithEmailPassword() {
+    const email = authEmail.trim().toLowerCase();
+    if (!email || !authPassword) {
+      setAuthMessage("أدخل البريد الإلكتروني وكلمة المرور.");
+      return;
+    }
+    setAuthMessage("جارٍ تسجيل الدخول...");
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password: authPassword });
+    if (error || !data.user) {
+      setAuthMessage("تعذر تسجيل الدخول. تحقق من البريد وكلمة المرور.");
+      return;
+    }
+    await openAuthenticatedWorkspace(data.user);
+  }
+
+  async function signUpWithEmailPassword() {
+    const email = authEmail.trim().toLowerCase();
+    if (!email || authPassword.length < 6) {
+      setAuthMessage("أدخل بريدًا صحيحًا وكلمة مرور من 6 أحرف على الأقل.");
+      return;
+    }
+    setAuthMessage("جارٍ إنشاء الحساب...");
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password: authPassword,
+      options: { emailRedirectTo: `${window.location.origin}/#/login` }
+    });
+    if (error) {
+      setAuthMessage(error.message);
+      return;
+    }
+    if (data.session && data.user) {
+      await openAuthenticatedWorkspace(data.user);
+      return;
+    }
+    setAuthMessage("تم إنشاء الحساب. تحقق من بريدك الإلكتروني لتأكيد الحساب ثم سجّل الدخول.");
+  }
+
+  async function resetPassword() {
+    const email = authEmail.trim().toLowerCase();
+    if (!email) {
+      setAuthMessage("أدخل البريد الإلكتروني أولًا لإرسال رابط إعادة الضبط.");
+      return;
+    }
+    setAuthMessage("جارٍ إرسال رابط إعادة ضبط كلمة المرور...");
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/#/login`
+    });
+    if (error) {
+      setAuthMessage(error.message);
+      return;
+    }
+    setAuthMessage("تم إرسال رابط إعادة ضبط كلمة المرور إلى بريدك الإلكتروني.");
+  }
+
+  async function updateRecoveredPassword() {
+    if (authPassword.length < 6) {
+      setAuthMessage("أدخل كلمة مرور جديدة من 6 أحرف على الأقل.");
+      return;
+    }
+    setAuthMessage("جارٍ تحديث كلمة المرور...");
+    const { data, error } = await supabase.auth.updateUser({ password: authPassword });
+    if (error || !data.user) {
+      setAuthMessage(error?.message || "تعذر تحديث كلمة المرور.");
+      return;
+    }
+    setAuthMessage("تم تحديث كلمة المرور.");
+    setAuthPassword("");
+    await openAuthenticatedWorkspace(data.user);
+  }
+
   async function sendEmailOtp() {
     const email = authEmail.trim().toLowerCase();
     if (!email) { setAuthMessage("أدخل البريد الإلكتروني أولاً."); return; }
@@ -426,19 +526,7 @@ function App() {
     setAuthMessage("جارٍ التحقق...");
     const { data, error } = await supabase.auth.verifyOtp({ email, token, type: "email" });
     if (error || !data.user) { setAuthMessage("الرمز غير صحيح أو انتهت صلاحيته."); return; }
-    const sessionUser = makeSessionUser(data.user);
-    setCurrentUser(sessionUser);
-    const { data: profile } = await supabase.from("profiles").select("id").eq("id", data.user.id).single();
-    if (!profile) {
-      setProfileDraft(d => ({ ...d, fullName: sessionUser.fullName || "" }));
-      setAuthStep("profile-setup");
-      setAuthMessage("");
-    } else {
-      const workspace = await loadWorkspace(data.user.id);
-      setState(workspace);
-      setLastSavedAt(workspace.course.savedAt);
-      goTo("app");
-    }
+    await openAuthenticatedWorkspace(data.user);
   }
 
   async function completeProfileSetup() {
@@ -487,6 +575,8 @@ function App() {
     setLastSavedAt("");
     setAuthStep("start");
     setAuthEmail("");
+    setAuthPassword("");
+    setAuthMode("login");
     setOtpCode("");
     setAuthMessage("");
     goTo("login");
@@ -907,6 +997,10 @@ ${practicalRows ? `<p class="sec">درجات العملي</p><table><tr><th>ال
                     <LogIn size={18} />
                     دخول
                   </button>
+                  <button className="button" onClick={signInWithGoogle}>
+                    <GoogleIcon />
+                    دخول بجوجل
+                  </button>
                   <button className="button" onClick={() => goTo("register")}>
                     <UserPlus size={18} />
                     إنشاء حساب
@@ -948,17 +1042,25 @@ ${practicalRows ? `<p class="sec">درجات العملي</p><table><tr><th>ال
         </section>
       )}
 
-      {(authStep === "profile-setup" || (!currentUser && (page === "register" || page === "login"))) && (
+      {(authStep === "profile-setup" || authStep === "password-reset" || (!currentUser && (page === "register" || page === "login"))) && (
         <AuthPanel
           step={authStep}
+          mode={authMode}
           email={authEmail}
+          password={authPassword}
           otpCode={otpCode}
           profileDraft={profileDraft}
           message={authMessage}
           onEmailChange={setAuthEmail}
+          onPasswordChange={setAuthPassword}
+          onModeChange={setAuthMode}
           onOtpChange={setOtpCode}
           onProfileDraftChange={setProfileDraft}
           onGoogleSignIn={signInWithGoogle}
+          onEmailPasswordSignIn={signInWithEmailPassword}
+          onEmailPasswordSignUp={signUpWithEmailPassword}
+          onResetPassword={resetPassword}
+          onUpdateRecoveredPassword={updateRecoveredPassword}
           onSendOtp={sendEmailOtp}
           onVerifyOtp={verifyEmailOtp}
           onCompleteProfile={completeProfileSetup}
@@ -1600,28 +1702,44 @@ type ProfileDraft = { fullName: string; collegeName: string; departmentName: str
 
 function AuthPanel({
   step,
+  mode,
   email,
+  password,
   otpCode,
   profileDraft,
   message,
   onEmailChange,
+  onPasswordChange,
+  onModeChange,
   onOtpChange,
   onProfileDraftChange,
   onGoogleSignIn,
+  onEmailPasswordSignIn,
+  onEmailPasswordSignUp,
+  onResetPassword,
+  onUpdateRecoveredPassword,
   onSendOtp,
   onVerifyOtp,
   onCompleteProfile,
   onBackToStart
 }: {
-  step: "start" | "otp-sent" | "profile-setup";
+  step: "start" | "otp-sent" | "password-reset" | "profile-setup";
+  mode: "login" | "register";
   email: string;
+  password: string;
   otpCode: string;
   profileDraft: ProfileDraft;
   message: string;
   onEmailChange: (v: string) => void;
+  onPasswordChange: (v: string) => void;
+  onModeChange: (v: "login" | "register") => void;
   onOtpChange: (v: string) => void;
   onProfileDraftChange: (d: ProfileDraft) => void;
   onGoogleSignIn: () => void;
+  onEmailPasswordSignIn: () => void;
+  onEmailPasswordSignUp: () => void;
+  onResetPassword: () => void;
+  onUpdateRecoveredPassword: () => void;
   onSendOtp: () => void;
   onVerifyOtp: () => void;
   onCompleteProfile: () => void;
@@ -1630,13 +1748,20 @@ function AuthPanel({
   const copyMap = {
     "start": {
       kicker: "البدء",
-      title: "تسجيل الدخول أو إنشاء حساب",
-      desc: "سجّل الدخول بحساب جوجل أو أدخل بريدك لاستلام رمز تحقق. لا حاجة لكلمة مرور."
+      title: mode === "login" ? "تسجيل الدخول" : "إنشاء حساب جديد",
+      desc: mode === "login"
+        ? "سجّل الدخول بحساب جوجل أو بالبريد الإلكتروني وكلمة المرور."
+        : "أنشئ حسابًا بحساب جوجل أو بالبريد الإلكتروني وكلمة المرور."
     },
     "otp-sent": {
       kicker: "التحقق",
       title: "أدخل رمز التحقق",
       desc: `تم إرسال رمز مكوّن من 6 أرقام إلى ${email}. تحقق من صندوق الوارد.`
+    },
+    "password-reset": {
+      kicker: "إعادة الضبط",
+      title: "تعيين كلمة مرور جديدة",
+      desc: "اكتب كلمة مرور جديدة لحسابك، وبعد الحفظ سيتم إدخالك للنظام."
     },
     "profile-setup": {
       kicker: "إعداد الحساب",
@@ -1656,9 +1781,17 @@ function AuthPanel({
       <div className="auth-form">
         {step === "start" && (
           <>
+            <div className="auth-tabs" role="tablist" aria-label="اختيار نوع المصادقة">
+              <button type="button" className={mode === "login" ? "active" : ""} onClick={() => onModeChange("login")}>
+                دخول
+              </button>
+              <button type="button" className={mode === "register" ? "active" : ""} onClick={() => onModeChange("register")}>
+                إنشاء حساب
+              </button>
+            </div>
             <button type="button" className="auth-google-btn" onClick={onGoogleSignIn}>
               <GoogleIcon />
-              المتابعة بحساب جوجل
+              {mode === "login" ? "الدخول بحساب جوجل" : "إنشاء حساب بجوجل"}
             </button>
             <div className="auth-divider"><span>أو</span></div>
             <label>
@@ -1672,11 +1805,36 @@ function AuthPanel({
                 onKeyDown={(e) => e.key === "Enter" && onSendOtp()}
               />
             </label>
+            <label>
+              كلمة المرور
+              <input
+                type="password"
+                value={password}
+                placeholder="••••••••"
+                autoComplete={mode === "login" ? "current-password" : "new-password"}
+                onChange={(e) => onPasswordChange(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    mode === "login" ? onEmailPasswordSignIn() : onEmailPasswordSignUp();
+                  }
+                }}
+              />
+            </label>
             {message && <p className="auth-message">{message}</p>}
-            <button className="button primary" onClick={onSendOtp}>
-              <LogIn size={18} />
-              إرسال رمز التحقق
+            <button className="button primary" onClick={mode === "login" ? onEmailPasswordSignIn : onEmailPasswordSignUp}>
+              {mode === "login" ? <LogIn size={18} /> : <UserPlus size={18} />}
+              {mode === "login" ? "تسجيل الدخول" : "إنشاء الحساب"}
             </button>
+            {mode === "login" && (
+              <div className="auth-secondary-actions">
+                <button type="button" className="auth-switch" onClick={onResetPassword}>
+                  نسيت كلمة المرور؟
+                </button>
+                <button type="button" className="auth-switch" onClick={onSendOtp}>
+                  الدخول برمز تحقق بدل كلمة المرور
+                </button>
+              </div>
+            )}
           </>
         )}
         {step === "otp-sent" && (
@@ -1702,6 +1860,27 @@ function AuthPanel({
             </button>
             <button type="button" className="auth-switch" onClick={onBackToStart}>
               تغيير البريد أو إعادة الإرسال
+            </button>
+          </>
+        )}
+        {step === "password-reset" && (
+          <>
+            <label>
+              كلمة المرور الجديدة
+              <input
+                type="password"
+                value={password}
+                placeholder="••••••••"
+                autoComplete="new-password"
+                autoFocus
+                onChange={(e) => onPasswordChange(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && onUpdateRecoveredPassword()}
+              />
+            </label>
+            {message && <p className="auth-message">{message}</p>}
+            <button className="button primary" onClick={onUpdateRecoveredPassword}>
+              <ShieldCheck size={18} />
+              حفظ كلمة المرور الجديدة
             </button>
           </>
         )}

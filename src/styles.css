@@ -620,6 +620,18 @@ textarea:focus-visible {
   font-size: 13px;
 }
 
+.auth-secondary-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.auth-secondary-actions .auth-switch {
+  min-height: 30px;
+}
+
 /* Google sign-in button */
 .auth-google-btn {
   display: flex;
