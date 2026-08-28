@@ -96,8 +96,17 @@ a {
   display: grid;
   place-items: center;
   color: #ffffff;
-  background: #1f6f61;
-  box-shadow: 0 12px 24px rgba(31, 111, 97, 0.18);
+  background:
+    linear-gradient(135deg, #38bdf8 0%, #2563eb 48%, #1e3a8a 100%);
+  box-shadow: 0 12px 24px rgba(37, 99, 235, 0.24);
+}
+
+.brand-glyph {
+  direction: ltr;
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0;
 }
 
 .main-nav {
@@ -125,12 +134,12 @@ a {
 
 .main-nav button:hover,
 .main-nav button.active {
-  background: #e8f3ee;
-  color: #1f6f61;
+  background: #eff6ff;
+  color: #2563eb;
 }
 
 .main-nav button.active {
-  box-shadow: inset 0 0 0 1px #c9e3d7;
+  box-shadow: inset 0 0 0 1px #bfdbfe;
 }
 
 .landing-section {
@@ -157,7 +166,7 @@ a {
 
 .landing-eyebrow {
   margin: 0 0 12px;
-  color: #1f6f61;
+  color: #2563eb;
   font-size: 13px;
   font-weight: 900;
 }
@@ -224,7 +233,7 @@ a {
   gap: 7px;
   min-height: 34px;
   padding: 0 10px;
-  border: 1px solid #dbe8e3;
+  border: 1px solid #dbeafe;
   border-radius: 8px;
   background: #f6fbf8;
   color: #2c5c53;
@@ -310,14 +319,14 @@ h2 {
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 3px solid rgba(31, 111, 97, 0.24);
+  outline: 3px solid rgba(37, 99, 235, 0.24);
   outline-offset: 2px;
 }
 
 .button.primary {
-  background: #1f6f61;
+  background: #2563eb;
   color: white;
-  border-color: #1f6f61;
+  border-color: #2563eb;
 }
 
 .button:disabled {
@@ -332,7 +341,7 @@ textarea:focus-visible {
 }
 
 .button.primary:not(:disabled):hover {
-  background: #195b50;
+  background: #1d4ed8;
 }
 
 .icon-button {
@@ -344,11 +353,11 @@ textarea:focus-visible {
   min-height: 44px;
   display: inline-flex;
   align-items: center;
-  border: 1px solid #c9e3d7;
+  border: 1px solid #bfdbfe;
   border-radius: 8px;
   padding: 0 11px;
-  background: #e8f3ee;
-  color: #1f6f61;
+  background: #eff6ff;
+  color: #2563eb;
   font-size: 13px;
   font-weight: 900;
   white-space: nowrap;
@@ -453,7 +462,7 @@ textarea:focus-visible {
   text-align: right;
   font-size: clamp(24px, 4vw, 38px);
   letter-spacing: 0;
-  color: #1f6f61;
+  color: #2563eb;
   line-height: 1.18;
 }
 
@@ -465,7 +474,7 @@ textarea:focus-visible {
 
 .trainer-stack,
 .linked-trainers {
-  border: 1px solid #dbe8e3;
+  border: 1px solid #dbeafe;
   border-radius: 8px;
   padding: 10px;
   background: #fbfdfc;
@@ -488,8 +497,8 @@ textarea:focus-visible {
   margin: 0 0 6px 6px;
   padding: 0 9px;
   border-radius: 8px;
-  background: #e8f3ee;
-  color: #1f6f61;
+  background: #eff6ff;
+  color: #2563eb;
   font-size: 13px;
   max-width: 100%;
   overflow-wrap: anywhere;
@@ -596,14 +605,14 @@ textarea:focus-visible {
 }
 
 .auth-tabs button.active {
-  background: #1f6f61;
-  border-color: #1f6f61;
+  background: #2563eb;
+  border-color: #2563eb;
   color: #ffffff;
 }
 
 .auth-message {
   margin: 0;
-  color: #1f6f61;
+  color: #2563eb;
   font-size: 14px;
   font-weight: 800;
 }
@@ -611,7 +620,7 @@ textarea:focus-visible {
 .auth-switch {
   border: 0;
   background: transparent;
-  color: #1f6f61;
+  color: #2563eb;
   min-height: 38px;
   padding: 0;
   font-weight: 900;
@@ -658,8 +667,8 @@ textarea:focus-visible {
 }
 
 .auth-google-btn:focus-visible {
-  outline: 3px solid rgba(31, 111, 97, 0.14);
-  border-color: #1f6f61;
+  outline: 3px solid rgba(37, 99, 235, 0.14);
+  border-color: #2563eb;
 }
 
 /* Divider between Google and email */
@@ -717,7 +726,7 @@ textarea:focus-visible {
 
 .section-kicker {
   margin: 0 0 4px;
-  color: #1f6f61;
+  color: #2563eb;
   font-size: 13px;
   font-weight: 900;
 }
@@ -733,9 +742,9 @@ textarea:focus-visible {
 }
 
 .status-badge.saved {
-  background: #e8f3ee;
-  border-color: #c9e3d7;
-  color: #1f6f61;
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #2563eb;
 }
 
 .setup-grid {
@@ -780,8 +789,8 @@ textarea:focus-visible {
   width: 44px;
   height: 44px;
   border-radius: 8px;
-  background: #e8f3ee;
-  color: #1f6f61;
+  background: #eff6ff;
+  color: #2563eb;
   display: grid;
   place-items: center;
 }
@@ -918,8 +927,8 @@ textarea {
 input:focus,
 select:focus,
 textarea:focus {
-  border-color: #1f6f61;
-  outline: 3px solid rgba(31, 111, 97, 0.14);
+  border-color: #2563eb;
+  outline: 3px solid rgba(37, 99, 235, 0.14);
 }
 
 textarea {
@@ -953,7 +962,7 @@ textarea {
 
 .section-summary {
   min-height: 72px;
-  border: 1px solid #dbe8e3;
+  border: 1px solid #dbeafe;
   border-radius: 8px;
   padding: 10px;
   display: grid;
@@ -969,7 +978,7 @@ textarea {
 }
 
 .section-summary strong {
-  color: #1f6f61;
+  color: #2563eb;
   font-size: 18px;
 }
 
@@ -1038,7 +1047,7 @@ textarea {
 .sheet-textarea {
   min-height: 180px;
   padding: 10px 12px;
-  border: 2px solid #1f6f61;
+  border: 2px solid #2563eb;
   border-radius: 12px;
   background: #eef2f4;
   color: #17202a;
@@ -1079,7 +1088,7 @@ textarea {
   padding: 9px 10px;
   border-radius: 8px;
   background: #f6fbf8;
-  border: 1px solid #dbe8e3;
+  border: 1px solid #dbeafe;
 }
 
 .assessment-form {
@@ -1129,8 +1138,8 @@ textarea {
 }
 
 .search-box:focus-within {
-  border-color: #1f6f61;
-  box-shadow: 0 0 0 3px rgba(31, 111, 97, 0.14);
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
 }
 
 .search-box input {
@@ -1179,7 +1188,7 @@ textarea {
 }
 
 .card-title span {
-  color: #1f6f61;
+  color: #2563eb;
   font-weight: 800;
   font-size: 13px;
 }
@@ -1253,7 +1262,7 @@ textarea {
 }
 
 .score-head span {
-  color: #1f6f61;
+  color: #2563eb;
   font-weight: 900;
 }
 
@@ -1270,13 +1279,13 @@ textarea {
 .grand-total {
   margin-top: 14px;
   align-items: center;
-  border-color: #c9e3d7;
+  border-color: #bfdbfe;
   background: #f6fbf8;
 }
 
 .grand-total strong {
   font-size: 28px;
-  color: #1f6f61;
+  color: #2563eb;
 }
 
 .empty {
@@ -1742,7 +1751,7 @@ textarea {
 }
 
 .toast-success {
-  background: #1f6f61;
+  background: #2563eb;
   color: #ffffff;
 }
 
@@ -1789,8 +1798,8 @@ button:disabled {
   margin-right: 4px;
   font-size: 10px;
   font-weight: 900;
-  background: #e8f3ee;
-  color: #1f6f61;
+  background: #eff6ff;
+  color: #2563eb;
   border-radius: 4px;
   padding: 1px 4px;
   vertical-align: middle;
@@ -1799,15 +1808,15 @@ button:disabled {
 .weight-tag {
   font-style: normal;
   font-size: 11px;
-  color: #1f6f61;
+  color: #2563eb;
   font-weight: 700;
 }
 
 .weight-notice {
-  color: #1f6f61;
+  color: #2563eb;
   font-weight: 700;
-  background: #e8f3ee;
-  border: 1px solid #c9e3d7;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
   border-radius: 8px;
   padding: 8px 12px;
   margin-bottom: 8px;
@@ -1856,7 +1865,7 @@ button:disabled {
 
 .stat-note strong {
   font-size: 14px;
-  color: #1f6f61;
+  color: #2563eb;
 }
 
 .grade-distribution {

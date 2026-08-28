@@ -222,7 +222,7 @@ export function getClassStats(trainees: Trainee[], assessments: Assessment[], gr
   const passThreshold = maxTotal > 0 ? maxTotal * 0.6 : 0;
   const passCount = totals.filter((t) => t >= passThreshold).length;
   const ranges = [
-    { label: "ممتاز", minPct: 85, maxPct: 101, color: "#1f6f61" },
+    { label: "ممتاز", minPct: 85, maxPct: 101, color: "#2563eb" },
     { label: "جيد جداً", minPct: 75, maxPct: 85, color: "#2d9e7a" },
     { label: "جيد", minPct: 65, maxPct: 75, color: "#e8a020" },
     { label: "مقبول", minPct: 50, maxPct: 65, color: "#d4761f" },

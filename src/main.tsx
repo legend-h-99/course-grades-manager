@@ -833,11 +833,11 @@ function App() {
       <header className="topbar">
         <div className="brand-block">
           <span className="brand-mark">
-            <GraduationCap size={22} />
+            <span className="brand-glyph">S</span>
           </span>
           <div>
-            <p className="eyebrow">مقرر مشترك</p>
-            <h1>نظام إدارة درجات المقرر</h1>
+            <p className="eyebrow">سند لإدارة الدرجات</p>
+            <h1>Sanad</h1>
           </div>
         </div>
         <nav className="main-nav" aria-label="روابط الصفحة">
@@ -919,10 +919,10 @@ function App() {
       {page === "home" && (
         <section className="landing-section" id="home">
           <div className="landing-hero">
-            <p className="landing-eyebrow">منصة درجات المقرر المشترك</p>
-            <h2>صفحة واحدة لإدارة درجات مقررك</h2>
+            <p className="landing-eyebrow">Sanad / سند</p>
+            <h2>إدارة درجات المقررات بثقة</h2>
             <p className="landing-lead">
-              أداة عملية للمدربين لإنشاء حساب المقرر، استيراد المتدربين، رصد الدرجات النظرية والعملية، وتصدير النتائج بسرعة.
+              منصة عملية للمدربين لإنشاء مساحة مقرر مشتركة، استيراد المتدربين، رصد الدرجات النظرية والعملية، وتصدير النتائج بسرعة.
             </p>
             <div className="landing-cta">
               {currentUser ? (
@@ -973,8 +973,8 @@ function App() {
               <div className="metric-icon">
                 <ShieldCheck size={22} />
               </div>
-              <h3>حفظ سحابي</h3>
-              <p>بياناتك محفوظة على السحابة وآمنة في أي وقت</p>
+              <h3>طبقة ثقة</h3>
+              <p>صلاحيات واضحة وتجهيز لمسار تدقيق آمن</p>
             </div>
           </div>
         </section>

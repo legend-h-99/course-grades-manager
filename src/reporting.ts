@@ -53,18 +53,18 @@ export function buildTraineeReportHtml(
   return `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8">
 <title>تقرير ${escapeHtml(trainee.name)}</title><style>
 body{font-family:"Segoe UI",Tahoma,Arial,sans-serif;direction:rtl;padding:32px;color:#17202a;max-width:560px;margin:auto;}
-h1{color:#1f6f61;margin:0 0 4px;}
+h1{color:#2563eb;margin:0 0 4px;}
 .sub{color:#607077;font-size:14px;margin:0 0 24px;}
 table{width:100%;border-collapse:collapse;margin:12px 0 20px;}
 th{background:#f7f9fa;padding:8px 12px;text-align:right;font-size:12px;color:#445158;border-bottom:2px solid #dce3e7;}
 td{padding:8px 12px;border-bottom:1px solid #e0e6e9;font-size:14px;}
-.sec{font-size:13px;font-weight:900;color:#1f6f61;margin:16px 0 4px;}
-.total{background:#e8f3ee;border-radius:8px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;margin-top:16px;}
+.sec{font-size:13px;font-weight:900;color:#2563eb;margin:16px 0 4px;}
+.total{background:#eff6ff;border-radius:8px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;margin-top:16px;}
 .total span{font-size:14px;color:#607077;}
-.total strong{font-size:26px;color:#1f6f61;font-weight:900;}
+.total strong{font-size:26px;color:#2563eb;font-weight:900;}
 @media print{button{display:none!important;}}
 </style></head><body>
-<button onclick="window.print()" style="margin-bottom:16px;padding:8px 16px;background:#1f6f61;color:#fff;border:0;border-radius:6px;cursor:pointer;font-size:14px;">طباعة / PDF</button>
+<button onclick="window.print()" style="margin-bottom:16px;padding:8px 16px;background:#2563eb;color:#fff;border:0;border-radius:6px;cursor:pointer;font-size:14px;">طباعة / PDF</button>
 <h1>تقرير متدرب</h1>
 <p class="sub">${escapeHtml(subtitle)}</p>
 <table>
