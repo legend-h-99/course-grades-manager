@@ -55,13 +55,16 @@ import { exportGradesWorkbook, readTraineeRows } from "./excel";
 import { buildTraineeReportHtml } from "./reporting";
 import type { AccountProfile, AppPage, AppState, Assessment, AssessmentKind, CourseSetup, Grade, SessionUser, Trainee, TrainerProfile } from "./types";
 
+const AUTO_SAVE_DELAY_MS = 3 * 60 * 1000;
+
 type ToastItem = { id: string; message: string; type: "success" | "error" | "info" };
 
 function readInitialPage(): AppPage {
   const hashPath = window.location.hash.replace(/^#\/?/, "");
-  if (hashPath === "register") return "register";
-  if (hashPath === "login") return "login";
-  if (hashPath === "app") return "app";
+  const baseHash = hashPath.split("?")[0].split("#")[0];
+  if (baseHash === "register") return "register";
+  if (baseHash === "login") return "login";
+  if (baseHash === "app") return "app";
   const pathname = window.location.pathname.replace(/\/+$/, "");
   if (pathname === "/auth/callback") return "login";
   if (pathname === "/register") return "register";
@@ -151,7 +154,7 @@ function App() {
       if (!user || !s.course.code || isBusyRef.current) return;
       try {
         const nextState = withCourseTrainer(user.id, s);
-        const saveResult = await saveWorkspace(user.id, nextState);
+        const saveResult = await saveWorkspace(nextState);
         if (saveResult) {
           setState((current) => ({ ...current, course: { ...current.course, ...saveResult } }));
         }
@@ -160,7 +163,7 @@ function App() {
       } catch {
         // silent — manual save still available
       }
-    }, 3 * 60 * 1000);
+    }, AUTO_SAVE_DELAY_MS);
     return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.trainees, state.assessments, state.grades]);
@@ -190,7 +193,7 @@ function App() {
           setAuthStep("profile-setup");
           goTo("login");
         } else {
-          const workspace = await loadWorkspace(sessionUser.id);
+          const workspace = await loadWorkspace();
           setState(workspace);
           setLastSavedAt(workspace.course.savedAt);
           goTo("app");
@@ -221,7 +224,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (currentUser && authStep !== "profile-setup" && authStep !== "password-reset" && (page === "login" || page === "register")) {
+    if (currentUser && authStep !== "profile-setup" && authStep !== "password-reset" && page !== "app") {
       goTo("app");
     }
   }, [currentUser, page, authStep]);
@@ -391,7 +394,7 @@ function App() {
       };
       const nextState = withCourseTrainer(currentUser.id, nextStateBase);
       setState(nextState);
-      const saveResult = await saveWorkspace(currentUser.id, nextState);
+      const saveResult = await saveWorkspace(nextState);
       if (saveResult) {
         setState((current) => ({ ...current, course: { ...current.course, ...saveResult } }));
       }
@@ -419,7 +422,7 @@ function App() {
       setAuthMessage("");
       return;
     }
-    const workspace = await loadWorkspace(user.id);
+    const workspace = await loadWorkspace();
     setState(workspace);
     setLastSavedAt(workspace.course.savedAt);
     setAuthMessage("");
@@ -536,7 +539,7 @@ function App() {
         nextUser = updatedUser ? { ...currentUser, ...updatedUser } : { ...currentUser, fullName: fullName.trim() };
         setCurrentUser(nextUser);
       }
-      await saveProfile(nextUser.id, {
+      await saveProfile({
         collegeName: collegeName.trim(),
         departmentName: departmentName.trim(),
         majorName: majorName.trim(),
@@ -579,7 +582,7 @@ function App() {
     try {
       const nextState = withCourseTrainer(currentUser.id, state);
       setState(nextState);
-      const saveResult = await saveWorkspace(currentUser.id, nextState);
+      const saveResult = await saveWorkspace(nextState);
       if (saveResult) {
         setState((current) => ({ ...current, course: { ...current.course, ...saveResult } }));
       }
@@ -596,7 +599,7 @@ function App() {
     if (!currentUser || isBusy) return;
     setIsBusy(true);
     try {
-      const workspace = await loadWorkspace(currentUser.id);
+      const workspace = await loadWorkspace();
       setState(workspace);
       setLastSavedAt(workspace.course.savedAt);
       toast("تم استدعاء آخر نسخة محفوظة.", "success");
@@ -631,8 +634,8 @@ function App() {
     }
     setIsBusy(true);
     try {
-      await joinCourse(currentUser.id, courseLookup, state.trainer.name || currentUser.fullName, state.trainer.employeeNumber);
-      const workspace = await loadWorkspace(currentUser.id);
+      await joinCourse(courseLookup, state.trainer.name || currentUser.fullName, state.trainer.employeeNumber);
+      const workspace = await loadWorkspace();
       setState(workspace);
       setLastSavedAt(workspace.course.savedAt);
       setCourseLookupMessage("تم الانضمام للمقرر.");
@@ -786,7 +789,7 @@ function App() {
         setConfirmDialog(null);
         setIsBusy(true);
         try {
-          await clearWorkspace(currentUser.id);
+          await clearWorkspace();
           setState(starterState);
           setActiveCardId(null);
           setManualNames("");
@@ -830,9 +833,11 @@ function App() {
           </div>
         </div>
         <nav className="main-nav" aria-label="روابط الصفحة">
-          <button type="button" className={page === "home" ? "active" : ""} onClick={() => goTo("home")}>
-            الرئيسية
-          </button>
+          {!currentUser && (
+            <button type="button" className={page === "home" ? "active" : ""} onClick={() => goTo("home")}>
+              الرئيسية
+            </button>
+          )}
           {currentUser && (
             <button type="button" className={page === "app" ? "active" : ""} onClick={() => goTo("app")}>
               لوحة الدرجات

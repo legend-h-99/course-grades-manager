@@ -24,32 +24,31 @@ export type ProfilePayload = {
   employeeNumber: string;
 };
 
-export async function saveProfile(userId: string, profile: ProfilePayload): Promise<void> {
-  await apiPost("/api/workspace/profile", { userId, profile });
+export async function saveProfile(profile: ProfilePayload): Promise<void> {
+  await apiPost("/api/workspace/profile", { profile });
 }
 
-export async function loadWorkspace(userId: string): Promise<AppState> {
-  return apiGet<AppState>(`/api/workspace?userId=${encodeURIComponent(userId)}`);
+export async function loadWorkspace(): Promise<AppState> {
+  return apiGet<AppState>("/api/workspace");
 }
 
-export async function saveWorkspace(userId: string, state: AppState): Promise<SaveWorkspaceResult | undefined> {
+export async function saveWorkspace(state: AppState): Promise<SaveWorkspaceResult | undefined> {
   if (!state.course.code) return;
-  return apiPost<SaveWorkspaceResult>("/api/workspace/save", { userId, state });
+  return apiPost<SaveWorkspaceResult>("/api/workspace/save", { state });
 }
 
 export async function findCourseByCode(code: string): Promise<CoursePreview | null> {
   return apiPost<CoursePreview | null>("/api/workspace/find-course", { code });
 }
 
-export async function joinCourse(userId: string, coursePreview: CoursePreview, trainerName: string, employeeNumber: string): Promise<void> {
+export async function joinCourse(coursePreview: CoursePreview, trainerName: string, employeeNumber: string): Promise<void> {
   await apiPost("/api/workspace/join-course", {
-    userId,
     code: coursePreview.code,
     trainerName,
     employeeNumber,
   });
 }
 
-export async function clearWorkspace(userId: string): Promise<void> {
-  await apiPost("/api/workspace/clear", { userId });
+export async function clearWorkspace(): Promise<void> {
+  await apiPost("/api/workspace/clear", {});
 }

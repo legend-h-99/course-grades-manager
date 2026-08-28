@@ -80,10 +80,9 @@ async function profileExists(env, token, userId) {
   return Array.isArray(rows) && rows.length > 0;
 }
 
-async function requireUser(env, request, requestedUserId) {
+async function requireUser(env, request) {
   const token = bearer(request);
   const user = await authUser(env, token);
-  if (requestedUserId && user.id !== requestedUserId) throw new Error("غير مصرح لهذا الحساب.");
   return { token, user };
 }
 
@@ -127,7 +126,6 @@ async function handleAuth(request, env, pathname) {
   if (pathname === "/api/auth/google/exchange") {
     requireConfig(env);
     if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) throw new Error("إعدادات Google غير مكتملة.");
-    const body = await readBody(request);
     const code = body.code;
     if (!code) return error("رمز التفويض مفقود.");
     const redirectUri = new URL("/auth/callback", url.origin).toString();
@@ -421,24 +419,22 @@ async function saveWorkspace(env, token, userId, state) {
 
 async function handleWorkspace(request, env, pathname) {
   const body = await readBody(request);
-  const url = new URL(request.url);
 
   if (pathname === "/api/workspace" && request.method === "GET") {
-    const userId = url.searchParams.get("userId") ?? "";
-    const { token } = await requireUser(env, request, userId);
-    return json(await loadWorkspace(env, token, userId));
+    const { token, user } = await requireUser(env, request);
+    return json(await loadWorkspace(env, token, user.id));
   }
 
   if (pathname === "/api/workspace/profile") {
-    const { token } = await requireUser(env, request, body.userId);
-    await saveProfile(env, token, body.userId, body.profile ?? {});
+    const { token, user } = await requireUser(env, request);
+    await saveProfile(env, token, user.id, body.profile ?? {});
     return json({ message: "تم حفظ الملف الشخصي." });
   }
 
   if (pathname === "/api/workspace/save") {
-    const { token } = await requireUser(env, request, body.userId);
+    const { token, user } = await requireUser(env, request);
     if (!body.state?.course?.code) return error("أنشئ رمز المقرر أولًا.");
-    return json(await saveWorkspace(env, token, body.userId, body.state));
+    return json(await saveWorkspace(env, token, user.id, body.state));
   }
 
   if (pathname === "/api/workspace/find-course") {
@@ -449,7 +445,7 @@ async function handleWorkspace(request, env, pathname) {
   }
 
   if (pathname === "/api/workspace/join-course") {
-    const { token } = await requireUser(env, request, body.userId);
+    const { token } = await requireUser(env, request);
     await supabase(env, "/rest/v1/rpc/join_course_by_code", {
       method: "POST",
       token,
@@ -459,10 +455,10 @@ async function handleWorkspace(request, env, pathname) {
   }
 
   if (pathname === "/api/workspace/clear") {
-    const { token } = await requireUser(env, request, body.userId);
-    const member = first(await supabase(env, "/rest/v1/course_trainers?user_id=eq." + encodeURIComponent(body.userId) + "&select=course_id&order=joined_at.desc&limit=1", { token }));
+    const { token, user } = await requireUser(env, request);
+    const member = first(await supabase(env, "/rest/v1/course_trainers?user_id=eq." + encodeURIComponent(user.id) + "&select=course_id&order=joined_at.desc&limit=1", { token }));
     if (member?.course_id) {
-      await supabase(env, "/rest/v1/course_trainers?course_id=eq." + encodeURIComponent(member.course_id) + "&user_id=eq." + encodeURIComponent(body.userId), { method: "DELETE", token });
+      await supabase(env, "/rest/v1/course_trainers?course_id=eq." + encodeURIComponent(member.course_id) + "&user_id=eq." + encodeURIComponent(user.id), { method: "DELETE", token });
     }
     return json({ message: "تم مسح بيانات المقرر." });
   }
@@ -477,12 +473,25 @@ async function fetchAsset(env, request, path) {
   return env.ASSETS.fetch(new Request(url, request));
 }
 
+function checkOrigin(request, url) {
+  if (request.method === "GET" || request.method === "HEAD") return;
+  const origin = request.headers.get("Origin");
+  if (!origin) return;
+  if (new URL(origin).origin !== url.origin) throw new Error("طلب غير مصرح به.");
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
+    if (url.pathname === "/auth/callback") {
+      const indexResponse = await fetchAsset(env, request, "/");
+      return withHeaders(indexResponse, { "Cache-Control": "no-store" });
+    }
+
     if (url.pathname.startsWith("/api/auth/")) {
       try {
+        checkOrigin(request, url);
         return await handleAuth(request, env, url.pathname);
       } catch (err) {
         return error(err.message || "تعذّر تنفيذ الطلب.", err.message === "سجّل الدخول أولًا." ? 401 : 400);
@@ -491,24 +500,25 @@ export default {
 
     if (url.pathname.startsWith("/api/workspace")) {
       try {
+        checkOrigin(request, url);
         return await handleWorkspace(request, env, url.pathname);
       } catch (err) {
         return error(err.message || "تعذّر تنفيذ الطلب.", err.message === "سجّل الدخول أولًا." ? 401 : 400);
       }
     }
 
+    if (request.method !== "GET" && request.method !== "HEAD") {
+      return new Response("Not found", { status: 404 });
+    }
+
     const assetResponse = await fetchAsset(env, request, url.pathname);
-    if (assetResponse.status !== 404) {
+    if (assetResponse.ok) {
       return url.pathname.startsWith("/assets/")
         ? withHeaders(assetResponse, cacheHeaders)
         : withHeaders(assetResponse, { "Cache-Control": "no-store" });
     }
 
-    if (request.method !== "GET" && request.method !== "HEAD") {
-      return new Response("Not found", { status: 404 });
-    }
-
-    const indexResponse = await fetchAsset(env, request, "/index.html");
+    const indexResponse = await fetchAsset(env, request, "/");
     return withHeaders(indexResponse, { "Cache-Control": "no-store" });
   }
 };

@@ -49,7 +49,13 @@ function oauthParamsFromLocation() {
 function readStoredSession(): StoredSession | null {
   try {
     const raw = window.sessionStorage.getItem(sessionKey);
-    return raw ? (JSON.parse(raw) as StoredSession) : null;
+    if (!raw) return null;
+    const session = JSON.parse(raw) as StoredSession;
+    if (session.expiresAt && Date.now() > session.expiresAt) {
+      window.sessionStorage.removeItem(sessionKey);
+      return null;
+    }
+    return session;
   } catch {
     return null;
   }
