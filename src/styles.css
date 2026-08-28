@@ -1332,20 +1332,28 @@ textarea {
 }
 
 @media (max-width: 760px) {
+  body {
+    background: #f3f7fb;
+  }
+
   .app-shell {
-    width: min(1480px, calc(100% - 24px));
-    padding: 10px 0 28px;
+    width: min(100%, calc(100% - 16px));
+    padding: max(10px, env(safe-area-inset-top)) 0 calc(28px + env(safe-area-inset-bottom));
   }
 
   .topbar {
     display: grid;
     gap: 10px;
-    position: static;
-    padding: 8px 0 12px;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    padding: 8px 0 10px;
     margin-bottom: 12px;
     width: 100%;
     overflow: hidden;
     justify-items: stretch;
+    background: rgba(243, 247, 251, 0.94);
+    backdrop-filter: blur(16px);
   }
 
   /* Brand + single دخول button in one compact row */
@@ -1481,9 +1489,23 @@ textarea {
   .code-card,
   .join-card,
   .panel {
-    padding: 12px;
+    padding: 14px;
     width: 100%;
     overflow: hidden;
+    border-radius: 10px;
+  }
+
+  .auth-panel {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .auth-copy {
+    text-align: center;
+  }
+
+  .auth-form {
+    padding: 14px;
   }
 
   .landing-section {
@@ -1547,6 +1569,7 @@ textarea {
 
   .storage-panel {
     display: grid;
+    background: linear-gradient(135deg, #10244f, #17202a);
   }
 
   .mobile-workspace-actions {
@@ -1559,6 +1582,10 @@ textarea {
     padding: 12px;
     margin-bottom: 16px;
     box-shadow: 0 10px 24px rgba(23, 32, 42, 0.04);
+  }
+
+  .storage-actions {
+    grid-template-columns: 1fr;
   }
 
   .mobile-workspace-actions .export-controls,
@@ -1635,24 +1662,80 @@ textarea {
 
   .table-wrap {
     max-width: 100%;
-    margin-inline: -2px;
+    margin-inline: 0;
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
   }
 
+  .table-wrap table,
+  .table-wrap thead,
+  .table-wrap tbody,
+  .table-wrap tr,
+  .table-wrap th,
+  .table-wrap td {
+    display: block;
+    width: 100%;
+  }
+
+  .table-wrap thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .table-wrap tbody {
+    display: grid;
+    gap: 10px;
+  }
+
+  .table-wrap tr {
+    border: 1px solid #dce3e7;
+    border-radius: 10px;
+    padding: 10px;
+    background: #ffffff;
+    box-shadow: 0 10px 22px rgba(23, 32, 42, 0.04);
+  }
+
+  .table-wrap td {
+    border: 0;
+    padding: 8px 0;
+    text-align: right;
+  }
+
+  .table-wrap td:not(.empty) {
+    display: grid;
+    grid-template-columns: minmax(92px, 0.38fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+  }
+
+  .table-wrap td:not(.empty)::before {
+    content: attr(data-label);
+    color: #607077;
+    font-size: 12px;
+    font-weight: 900;
+  }
+
+  .table-wrap td small {
+    margin-top: 2px;
+  }
+
+  .table-wrap td input {
+    min-height: 42px;
+  }
+
+  .grades-table,
   table {
-    min-width: 640px;
+    min-width: 0;
   }
 
-  .grades-table {
-    min-width: 820px;
-  }
-
-  th,
-  td {
-    padding: 9px 8px;
-  }
-
+  .grades-table .grade-input,
   .grade-input {
-    width: 68px;
+    width: 100%;
     min-height: 42px;
   }
 

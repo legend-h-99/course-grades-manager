@@ -1011,7 +1011,7 @@ function App() {
       <section className="storage-panel" aria-label="حفظ واستدعاء البيانات">
         <div>
           <p className="section-kicker">حفظ واستدعاء</p>
-          <h2>بيانات هذا الحساب محفوظة في قاعدة بيانات سحابية</h2>
+          <h2>بيانات هذا الحساب محفوظة في مساحة آمنة</h2>
           <span>آخر حفظ: {formatSavedAt(lastSavedAt || state.course.savedAt)}</span>
         </div>
         <div className="storage-actions">
@@ -1368,26 +1368,26 @@ function App() {
               <tbody>
                 {managedTrainees.map((trainee) => (
                   <tr key={trainee.id}>
-                    <td>
+                    <td data-label="الرقم التدريبي">
                       <input
                         value={trainee.trainingNumber}
                         onChange={(event) => updateTrainee(trainee.id, "trainingNumber", event.target.value)}
                       />
                     </td>
-                    <td>
+                    <td data-label="اسم المتدرب">
                       <input
                         value={trainee.name}
                         onChange={(event) => updateTrainee(trainee.id, "name", event.target.value)}
                       />
                     </td>
-                    <td>
+                    <td data-label="شعبة نظري">
                       <input
                         value={trainee.theorySection}
                         placeholder="مثال: ن-1"
                         onChange={(event) => updateTrainee(trainee.id, "theorySection", event.target.value)}
                       />
                     </td>
-                    <td>
+                    <td data-label="شعبة عملي">
                       <input
                         value={trainee.practicalSection}
                         placeholder="مثال: ع-2"
@@ -1520,14 +1520,14 @@ function App() {
                       className={activeCard?.id === trainee.id ? "selected-row" : ""}
                       onClick={() => setActiveCardId(trainee.id)}
                     >
-                      <td>
+                      <td data-label="المتدرب">
                         <strong>{trainee.name}</strong>
                         <small>{trainee.trainingNumber}</small>
                       </td>
-                      <td>{trainee.theorySection || "-"}</td>
-                      <td>{trainee.practicalSection || "-"}</td>
+                      <td data-label="نظري">{trainee.theorySection || "-"}</td>
+                      <td data-label="عملي">{trainee.practicalSection || "-"}</td>
                       {state.assessments.map((assessment) => (
-                        <td key={assessment.id}>
+                        <td key={assessment.id} data-label={assessment.name}>
                           <input
                             className="grade-input"
                             type="number"
@@ -1541,7 +1541,7 @@ function App() {
                           />
                         </td>
                       ))}
-                      <td>
+                      <td data-label={weighted ? "الموزون" : "المجموع"}>
                         <strong>{t.total}</strong>
                       </td>
                     </tr>
@@ -1690,7 +1690,7 @@ function AuthPanel({
     "profile-setup": {
       kicker: "إعداد الحساب",
       title: "أكمل بيانات حسابك",
-      desc: "أدخل بياناتك حتى تُحفظ مساحة العمل على اسمك في السحابة، ثم يمكنك إضافة المقرر والمتدربين."
+      desc: "أدخل بياناتك حتى تُجهّز مساحتك الخاصة، ثم يمكنك إضافة المقرر والمتدربين."
     }
   };
   const { kicker, title, desc } = copyMap[step];
