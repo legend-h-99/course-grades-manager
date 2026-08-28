@@ -833,11 +833,12 @@ function App() {
       <header className="topbar">
         <div className="brand-block">
           <span className="brand-mark">
-            <span className="brand-glyph">S</span>
+            <SanadLogoMark />
           </span>
-          <div>
-            <p className="eyebrow">سند لإدارة الدرجات</p>
+          <div className="brand-lockup">
             <h1>Sanad</h1>
+            <p className="brand-ar">سند</p>
+            <p className="eyebrow">إدارة الدرجات</p>
           </div>
         </div>
         <nav className="main-nav" aria-label="روابط الصفحة">
@@ -1610,6 +1611,37 @@ function ConfirmDialog({ message, onConfirm, onCancel }: { message: string; onCo
         </div>
       </div>
     </div>
+  );
+}
+
+function SanadLogoMark() {
+  return (
+    <svg className="sanad-logo-mark" viewBox="0 0 64 64" role="img" aria-label="Sanad">
+      <defs>
+        <linearGradient id="sanadLogoPrimary" x1="10" y1="8" x2="54" y2="56" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#74d6ff" />
+          <stop offset="0.48" stopColor="#2563eb" />
+          <stop offset="1" stopColor="#1e3a8a" />
+        </linearGradient>
+        <linearGradient id="sanadLogoAccent" x1="52" y1="8" x2="12" y2="56" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#38bdf8" />
+          <stop offset="1" stopColor="#0ea5e9" />
+        </linearGradient>
+      </defs>
+      <path
+        d="M21 8h20c3.1 0 5.9 1.7 7.4 4.4l7.5 13.1c1.7 3 .7 6.8-2.3 8.5l-4.8 2.7-9.4-16.4H24.8l-6.1 10.6 24.8 14.3-5.8 10.1-25.1-14.5c-6.2-3.6-8.3-11.4-4.7-17.6l5.7-9.9C15.1 10 17.9 8 21 8Z"
+        fill="url(#sanadLogoPrimary)"
+      />
+      <path
+        d="M43 56H23c-3.1 0-5.9-1.7-7.4-4.4L8.1 38.5c-1.7-3-.7-6.8 2.3-8.5l4.8-2.7 9.4 16.4h14.6l6.1-10.6L20.5 18.8l5.8-10.1 25.1 14.5c6.2 3.6 8.3 11.4 4.7 17.6l-5.7 9.9C48.9 54 46.1 56 43 56Z"
+        fill="url(#sanadLogoAccent)"
+      />
+      <path
+        d="M23.5 21.2 40.8 31.2 35.4 40.5 18.1 30.5 23.5 21.2Z"
+        fill="#0b1638"
+        opacity="0.28"
+      />
+    </svg>
   );
 }
 

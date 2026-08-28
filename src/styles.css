@@ -141,6 +141,11 @@ a {
   min-width: 0;
 }
 
+.brand-lockup {
+  display: grid;
+  gap: 0;
+}
+
 .brand-mark {
   width: 46px;
   height: 46px;
@@ -149,17 +154,17 @@ a {
   place-items: center;
   color: #ffffff;
   background:
-    linear-gradient(135deg, #38bdf8 0%, #2563eb 48%, #1e3a8a 100%);
+    radial-gradient(circle at 28% 18%, rgba(116, 214, 255, 0.22), transparent 34%),
+    linear-gradient(135deg, #06142f 0%, #0f255f 100%);
   box-shadow: 0 12px 24px rgba(37, 99, 235, 0.24);
   animation: brandGlow 3.8s ease-in-out infinite;
+  overflow: hidden;
 }
 
-.brand-glyph {
-  direction: ltr;
-  font-size: 24px;
-  font-weight: 900;
-  line-height: 1;
-  letter-spacing: 0;
+.sanad-logo-mark {
+  width: 36px;
+  height: 36px;
+  filter: drop-shadow(0 6px 10px rgba(56, 189, 248, 0.18));
 }
 
 .main-nav {
@@ -298,7 +303,7 @@ a {
 
 .landing-feature-card:hover {
   transform: translateY(-2px);
-  border-color: #bfd5ce;
+  border-color: #93c5fd;
 }
 
 .landing-feature-card h3 {
@@ -328,8 +333,8 @@ a {
   padding: 0 10px;
   border: 1px solid #dbeafe;
   border-radius: 8px;
-  background: #f6fbf8;
-  color: #2c5c53;
+  background: #eff6ff;
+  color: #1e3a8a;
   font-size: 13px;
   font-weight: 800;
 }
@@ -349,13 +354,22 @@ a {
 .setup-panel:hover,
 .auth-panel:hover {
   transform: translateY(-2px);
-  border-color: #bfd5ce;
+  border-color: #93c5fd;
 }
 
 .eyebrow {
-  margin: 0 0 6px;
-  color: #4f6f52;
+  margin: 2px 0 0;
+  color: #526168;
+  font-size: 12px;
   font-weight: 700;
+}
+
+.brand-ar {
+  margin: -2px 0 0;
+  color: #38bdf8;
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1;
 }
 
 h1,
@@ -505,7 +519,7 @@ textarea:focus-visible {
 }
 
 .storage-panel .section-kicker {
-  color: #9be0ca;
+  color: #93c5fd;
 }
 
 .storage-panel span,
@@ -517,7 +531,7 @@ textarea:focus-visible {
 }
 
 .storage-panel strong {
-  color: #9be0ca;
+  color: #93c5fd;
 }
 
 .storage-actions {
@@ -559,7 +573,7 @@ textarea:focus-visible {
   display: grid;
   align-content: space-between;
   gap: 14px;
-  background: linear-gradient(135deg, #f6fbf8, #ffffff 70%);
+  background: linear-gradient(135deg, #eff6ff, #ffffff 70%);
 }
 
 .code-card h2 {
@@ -767,7 +781,7 @@ textarea:focus-visible {
 
 .auth-google-btn:hover {
   background: #f8f9fa;
-  border-color: #bfd5ce;
+  border-color: #93c5fd;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
 }
 
@@ -1052,7 +1066,7 @@ tbody tr:hover {
 }
 
 .selected-row {
-  background: #eef7f3;
+  background: #eff6ff;
 }
 
 input,
@@ -1111,7 +1125,7 @@ textarea {
   display: grid;
   align-content: center;
   gap: 2px;
-  background: #f6fbf8;
+  background: #eff6ff;
 }
 
 .section-summary span {
@@ -1232,7 +1246,7 @@ textarea {
   line-height: 1.5;
   padding: 9px 10px;
   border-radius: 8px;
-  background: #f6fbf8;
+  background: #eff6ff;
   border: 1px solid #dbeafe;
 }
 
@@ -1268,8 +1282,8 @@ textarea {
 }
 
 .pill.practical {
-  background: #f0f5e6;
-  color: #4c641f;
+  background: #ecfeff;
+  color: #155e75;
 }
 
 .search-box {
@@ -1425,7 +1439,7 @@ textarea {
   margin-top: 14px;
   align-items: center;
   border-color: #bfdbfe;
-  background: #f6fbf8;
+  background: #eff6ff;
 }
 
 .grand-total strong {
