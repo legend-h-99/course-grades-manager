@@ -42,6 +42,7 @@ import {
 } from "./courseData";
 import "./styles.css";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { authApi } from "./api";
 import {
   clearWorkspace,
@@ -1092,7 +1093,7 @@ function App() {
             <span>أدخل رمز المقرر، ثم انضم للمقرر لعرض بياناته ومدربيه.</span>
           </div>
           <div className="join-form">
-            <input
+            <Input
               value={courseCodeQuery}
               placeholder="مثال: A7K2M9Q4"
               onChange={(event) => setCourseCodeQuery(normalizeCourseCode(event.target.value))}
@@ -1129,7 +1130,7 @@ function App() {
         <div className="setup-grid">
           <label>
             اسم الكلية
-            <input
+            <Input
               value={state.account.collegeName}
               placeholder="مثال: الكلية التقنية"
               onChange={(event) =>
@@ -1142,7 +1143,7 @@ function App() {
           </label>
           <label>
             القسم
-            <input
+            <Input
               value={state.account.departmentName}
               placeholder="مثال: تقنية الحاسب"
               onChange={(event) =>
@@ -1155,7 +1156,7 @@ function App() {
           </label>
           <label>
             التخصص
-            <input
+            <Input
               value={state.account.majorName}
               placeholder="اختياري"
               onChange={(event) =>
@@ -1168,7 +1169,7 @@ function App() {
           </label>
           <label>
             اسم المدرب
-            <input
+            <Input
               value={state.trainer.name}
               placeholder="مثال: أحمد محمد"
               onChange={(event) =>
@@ -1178,7 +1179,7 @@ function App() {
           </label>
           <label>
             الرقم الوظيفي
-            <input
+            <Input
               value={state.trainer.employeeNumber}
               placeholder="اختياري"
               onChange={(event) =>
@@ -1191,7 +1192,7 @@ function App() {
           </label>
           <label>
             اسم المقرر
-            <input
+            <Input
               value={state.course.name}
               placeholder="مثال: أساسيات الحاسب"
               onChange={(event) =>
@@ -1216,7 +1217,7 @@ function App() {
           </label>
           <label>
             رقم الشعبة
-            <input
+            <Input
               value={state.course.sectionNumber}
               placeholder="مثال: 101"
               onChange={(event) =>
@@ -1277,7 +1278,7 @@ function App() {
             {manageSectionKind !== "all" && (
               <label>
                 رقم الشعبة
-                <input
+                <Input
                   list="manage-section-options"
                   value={manageSectionNumber}
                   placeholder="اكتب أو اختر رقم الشعبة"
@@ -1366,26 +1367,26 @@ function App() {
                 {managedTrainees.map((trainee) => (
                   <tr key={trainee.id}>
                     <td data-label="الرقم التدريبي">
-                      <input
+                      <Input
                         value={trainee.trainingNumber}
                         onChange={(event) => updateTrainee(trainee.id, "trainingNumber", event.target.value)}
                       />
                     </td>
                     <td data-label="اسم المتدرب">
-                      <input
+                      <Input
                         value={trainee.name}
                         onChange={(event) => updateTrainee(trainee.id, "name", event.target.value)}
                       />
                     </td>
                     <td data-label="شعبة نظري">
-                      <input
+                      <Input
                         value={trainee.theorySection}
                         placeholder="مثال: ن-1"
                         onChange={(event) => updateTrainee(trainee.id, "theorySection", event.target.value)}
                       />
                     </td>
                     <td data-label="شعبة عملي">
-                      <input
+                      <Input
                         value={trainee.practicalSection}
                         placeholder="مثال: ع-2"
                         onChange={(event) => updateTrainee(trainee.id, "practicalSection", event.target.value)}
@@ -1413,7 +1414,7 @@ function App() {
             <span>أضف اختبارًا للمقرر ثم ارصد درجاته في الجدول.</span>
           </div>
           <div className="assessment-form">
-            <input
+            <Input
               placeholder="اسم الاختبار"
               value={assessmentDraft.name}
               onChange={(event) => setAssessmentDraft((draft) => ({ ...draft, name: event.target.value }))}
@@ -1427,7 +1428,7 @@ function App() {
               <option value="theory">نظري</option>
               <option value="practical">عملي</option>
             </select>
-            <input
+            <Input
               type="number"
               min="1"
               placeholder="الدرجة القصوى"
@@ -1436,7 +1437,7 @@ function App() {
                 setAssessmentDraft((draft) => ({ ...draft, maxScore: numberOrZero(event.target.value) }))
               }
             />
-            <input
+            <Input
               type="number"
               min="0"
               max="100"
@@ -1447,7 +1448,7 @@ function App() {
                 setAssessmentDraft((draft) => ({ ...draft, weight: numberOrZero(event.target.value) }))
               }
             />
-            <input
+            <Input
               type="date"
               value={assessmentDraft.date}
               onChange={(event) => setAssessmentDraft((draft) => ({ ...draft, date: event.target.value }))}
@@ -1481,7 +1482,7 @@ function App() {
           </div>
           <div className="search-box">
             <Search size={18} />
-            <input
+            <Input
               value={query}
               placeholder="استعلام عن متدرب..."
               onChange={(event) => setQuery(event.target.value)}
@@ -1525,7 +1526,7 @@ function App() {
                       <td data-label="عملي">{trainee.practicalSection || "-"}</td>
                       {state.assessments.map((assessment) => (
                         <td key={assessment.id} data-label={assessment.name}>
-                          <input
+                          <Input
                             className="grade-input"
                             type="number"
                             min="0"
@@ -1748,7 +1749,7 @@ function AuthPanel({
             <div className="auth-divider"><span>أو</span></div>
             <label>
               البريد الإلكتروني
-              <input
+              <Input
                 type="email"
                 value={email}
                 placeholder="name@example.com"
@@ -1759,7 +1760,7 @@ function AuthPanel({
             </label>
             <label>
               كلمة المرور
-              <input
+              <Input
                 type="password"
                 value={password}
                 placeholder="••••••••"
@@ -1793,7 +1794,7 @@ function AuthPanel({
           <>
             <label>
               رمز التحقق
-              <input
+              <Input
                 className="otp-input"
                 value={otpCode}
                 placeholder="000000"
@@ -1819,7 +1820,7 @@ function AuthPanel({
           <>
             <label>
               كلمة المرور الجديدة
-              <input
+              <Input
                 type="password"
                 value={password}
                 placeholder="••••••••"
@@ -1840,7 +1841,7 @@ function AuthPanel({
           <>
             <label>
               الاسم الكامل
-              <input
+              <Input
                 value={profileDraft.fullName}
                 placeholder="اسم المدرب"
                 autoComplete="name"
@@ -1849,7 +1850,7 @@ function AuthPanel({
             </label>
             <label>
               الكلية أو الجهة
-              <input
+              <Input
                 value={profileDraft.collegeName}
                 placeholder="كلية التقنية"
                 onChange={(e) => onProfileDraftChange({ ...profileDraft, collegeName: e.target.value })}
@@ -1857,7 +1858,7 @@ function AuthPanel({
             </label>
             <label>
               القسم
-              <input
+              <Input
                 value={profileDraft.departmentName}
                 placeholder="قسم تقنية المعلومات"
                 onChange={(e) => onProfileDraftChange({ ...profileDraft, departmentName: e.target.value })}
@@ -1865,7 +1866,7 @@ function AuthPanel({
             </label>
             <label>
               التخصص <span className="label-optional">(اختياري)</span>
-              <input
+              <Input
                 value={profileDraft.majorName}
                 placeholder="التخصص"
                 onChange={(e) => onProfileDraftChange({ ...profileDraft, majorName: e.target.value })}
@@ -1873,7 +1874,7 @@ function AuthPanel({
             </label>
             <label>
               الرقم الوظيفي <span className="label-optional">(اختياري)</span>
-              <input
+              <Input
                 value={profileDraft.employeeNumber}
                 placeholder="الرقم الوظيفي"
                 onChange={(e) => onProfileDraftChange({ ...profileDraft, employeeNumber: e.target.value })}
