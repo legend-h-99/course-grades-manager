@@ -21,6 +21,31 @@ type ApiAuthResponse = {
 
 const sessionKey = "sanad.session";
 
+function oauthParamsFromLocation() {
+  const hash = window.location.hash.replace(/^#/, "");
+  const query = window.location.search.replace(/^\?/, "");
+  const candidates = [
+    hash,
+    query,
+    hash.includes("?") ? hash.slice(hash.indexOf("?") + 1) : "",
+    hash.includes("#") ? hash.slice(hash.lastIndexOf("#") + 1) : "",
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    const params = new URLSearchParams(candidate);
+    const accessToken = params.get("access_token");
+    if (accessToken) {
+      return {
+        accessToken,
+        refreshToken: params.get("refresh_token") ?? undefined,
+        expiresIn: Number(params.get("expires_in") ?? "") || undefined,
+      };
+    }
+  }
+
+  return null;
+}
+
 function readStoredSession(): StoredSession | null {
   try {
     const raw = window.sessionStorage.getItem(sessionKey);
@@ -72,6 +97,33 @@ function normalizeSession(payload: ApiAuthResponse) {
 }
 
 export const authApi = {
+  async completeOAuthCallback() {
+    const tokens = oauthParamsFromLocation();
+    if (!tokens?.accessToken) return { session: null, profileExists: false };
+
+    const response = await fetch("/api/auth/me", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${tokens.accessToken}` },
+    });
+    const payload = await response.json().catch(() => null) as ApiAuthResponse | null;
+    if (!response.ok || !payload?.user) throw new Error(payload?.message || "تعذّر إكمال تسجيل الدخول.");
+
+    const session = {
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      expiresIn: tokens.expiresIn,
+      user: payload.user,
+    };
+    writeStoredSession(session);
+    window.history.replaceState(null, "", "/#/login");
+    return { session: readStoredSession(), profileExists: Boolean(payload.profileExists) };
+  },
+
+  signInWithGoogle() {
+    const redirectTo = `${window.location.origin}/auth/callback`;
+    window.location.assign(`/api/auth/google?redirectTo=${encodeURIComponent(redirectTo)}`);
+  },
+
   async getSession() {
     const session = readStoredSession();
     if (!session?.accessToken) return { session: null, profileExists: false };

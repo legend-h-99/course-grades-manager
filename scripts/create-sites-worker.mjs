@@ -103,11 +103,21 @@ function sessionPayload(data, profile) {
 
 async function handleAuth(request, env, pathname) {
   const body = await readBody(request);
+  const url = new URL(request.url);
 
   if (pathname === "/api/auth/me") {
     const token = bearer(request);
     const user = await authUser(env, token);
     return json({ user: userFromSupabase(user), profileExists: await profileExists(env, token, user.id) });
+  }
+
+  if (pathname === "/api/auth/google") {
+    requireConfig(env);
+    const redirectTo = url.searchParams.get("redirectTo") || new URL("/auth/callback", url.origin).toString();
+    const authUrl = new URL("/auth/v1/authorize", env.SUPABASE_URL);
+    authUrl.searchParams.set("provider", "google");
+    authUrl.searchParams.set("redirect_to", redirectTo);
+    return Response.redirect(authUrl.toString(), 302);
   }
 
   if (pathname === "/api/auth/sign-in") {

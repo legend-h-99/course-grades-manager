@@ -200,6 +200,32 @@ SUPABASE_ANON_KEY
 
 لا تستخدم بادئة `VITE_` لهذه القيم، ولا تضعها داخل كود الواجهة. المتصفح يجب أن يتصل بنفس الدومين فقط عبر `/api`.
 
+## تسجيل الدخول بجوجل
+
+زر Google يبدأ من مسار التطبيق `/api/auth/google`، ثم يرجع إلى:
+
+```text
+https://sanadapp.pro/auth/callback
+```
+
+في Google Cloud Console أضف:
+
+```text
+Authorized JavaScript origins:
+https://sanadapp.pro
+https://www.sanadapp.pro
+
+Authorized redirect URIs:
+https://nhiylmayomuvdpvdlrjx.supabase.co/auth/v1/callback
+```
+
+وفي Supabase Authentication URL Configuration أضف:
+
+```text
+https://sanadapp.pro/*
+https://www.sanadapp.pro/*
+```
+
 ## ملاحظات مهمة
 
 - يجب أن يكون لكل مقرر رمز فريد.

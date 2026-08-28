@@ -63,6 +63,7 @@ function readInitialPage(): AppPage {
   if (hashPath === "login") return "login";
   if (hashPath === "app") return "app";
   const pathname = window.location.pathname.replace(/\/+$/, "");
+  if (pathname === "/auth/callback") return "login";
   if (pathname === "/register") return "register";
   if (pathname === "/login") return "login";
   if (pathname === "/app") return "app";
@@ -167,6 +168,19 @@ function App() {
   // Bootstrap the app session through the local API boundary.
   useEffect(() => {
     async function init() {
+      try {
+        const oauth = await authApi.completeOAuthCallback();
+        if (oauth.session?.user) {
+          await openAuthenticatedWorkspace(oauth.session.user, oauth.profileExists);
+          setIsLoading(false);
+          setTimeout(() => { isInitializedRef.current = true; }, 0);
+          return;
+        }
+      } catch (err) {
+        setAuthMessage((err as Error).message || "تعذّر إكمال تسجيل الدخول بجوجل.");
+        goTo("login");
+      }
+
       const { session, profileExists } = await authApi.getSession();
       if (session?.user) {
         const sessionUser = session.user;
@@ -391,7 +405,8 @@ function App() {
   }
 
   async function signInWithGoogle() {
-    setAuthMessage("الدخول بجوجل يحتاج نطاق مصادقة مخصص. استخدم البريد الإلكتروني حاليًا.");
+    setAuthMessage("جارٍ تحويلك إلى Google...");
+    authApi.signInWithGoogle();
   }
 
   async function openAuthenticatedWorkspace(user: SessionUser, profileExists?: boolean) {
