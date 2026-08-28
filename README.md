@@ -183,7 +183,7 @@ npm run dev
 npm run build
 ```
 
-نشر Cloudflare Worker يستخدم ملف `wrangler.jsonc` في جذر المشروع. هذا الملف يربط كود الـ API من `dist/server/index.js` مع ملفات الواجهة من `dist/public`.
+نشر Cloudflare Worker يستخدم ملف `wrangler.jsonc` في جذر المشروع. هذا الملف يربط كود الـ API من `dist/server/index.js` مع ملفات الواجهة من `dist/public`، ويجعل مسارات `/api/*` تمر على الـ Worker قبل ملفات الواجهة.
 
 معاينة نسخة الإنتاج محليًا:
 
