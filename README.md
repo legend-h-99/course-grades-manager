@@ -135,7 +135,8 @@
 - React
 - TypeScript
 - Vite
-- Supabase
+- Cloudflare Worker كطبقة API عازلة
+- Supabase خلف طبقة الخادم فقط
 - CSS عادي
 - lucide-react للأيقونات
 - read-excel-file لقراءة ملفات Excel
@@ -144,11 +145,12 @@
 ## الملفات الأساسية
 
 - `src/main.tsx`: واجهة التطبيق والمنطق الرئيسي للتفاعل.
+- `src/api.ts`: عميل الواجهة الداخلي الذي يستدعي `/api` فقط.
 - `src/courseData.ts`: دوال تجهيز بيانات المقرر والمتدربين والدرجات.
-- `src/storage.ts`: التعامل مع Supabase للحفظ والاستدعاء والانضمام للمقرر.
+- `src/storage.ts`: التعامل مع طبقة `/api` للحفظ والاستدعاء والانضمام للمقرر.
 - `src/types.ts`: تعريف أنواع البيانات المستخدمة في التطبيق.
 - `src/styles.css`: تنسيقات الواجهة.
-- `src/supabase.ts`: إعداد الاتصال بقاعدة بيانات Supabase.
+- `scripts/create-sites-worker.mjs`: إنشاء Worker الإنتاج الذي يخدم التطبيق ويمرر طلبات `/api` إلى طبقة التخزين.
 
 ## نموذج البيانات العام
 
@@ -186,6 +188,17 @@ npm run build
 ```bash
 npm run preview
 ```
+
+## متغيرات وأسرار النشر
+
+في Cloudflare Worker يجب ضبط الأسرار التالية:
+
+```bash
+SUPABASE_URL
+SUPABASE_ANON_KEY
+```
+
+لا تستخدم بادئة `VITE_` لهذه القيم، ولا تضعها داخل كود الواجهة. المتصفح يجب أن يتصل بنفس الدومين فقط عبر `/api`.
 
 ## ملاحظات مهمة
 

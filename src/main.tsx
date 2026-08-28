@@ -41,12 +41,13 @@ import {
   type ClassStats,
 } from "./courseData";
 import "./styles.css";
-import { supabase } from "./supabase";
+import { authApi } from "./api";
 import {
   clearWorkspace,
   findCourseByCode as dbFindCourseByCode,
   joinCourse,
   loadWorkspace,
+  saveProfile,
   saveWorkspace,
   type CoursePreview
 } from "./storage";
@@ -55,14 +56,6 @@ import { buildTraineeReportHtml } from "./reporting";
 import type { AccountProfile, AppPage, AppState, Assessment, AssessmentKind, CourseSetup, Grade, SessionUser, Trainee, TrainerProfile } from "./types";
 
 type ToastItem = { id: string; message: string; type: "success" | "error" | "info" };
-
-function makeSessionUser(user: { id: string; email?: string; user_metadata?: Record<string, unknown> }): SessionUser {
-  return {
-    id: user.id,
-    email: user.email ?? "",
-    fullName: (user.user_metadata?.full_name as string) ?? ""
-  };
-}
 
 function readInitialPage(): AppPage {
   const hashPath = window.location.hash.replace(/^#\/?/, "");
@@ -171,20 +164,19 @@ function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.trainees, state.assessments, state.grades]);
 
-  // Bootstrap Supabase auth session on mount
+  // Bootstrap the app session through the local API boundary.
   useEffect(() => {
     async function init() {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { session, profileExists } = await authApi.getSession();
       if (session?.user) {
-        const sessionUser = makeSessionUser(session.user);
+        const sessionUser = session.user;
         setCurrentUser(sessionUser);
-        const { data: profile } = await supabase.from("profiles").select("id").eq("id", session.user.id).single();
-        if (!profile) {
+        if (!profileExists) {
           setProfileDraft(d => ({ ...d, fullName: sessionUser.fullName || "" }));
           setAuthStep("profile-setup");
           goTo("login");
         } else {
-          const workspace = await loadWorkspace(session.user.id);
+          const workspace = await loadWorkspace(sessionUser.id);
           setState(workspace);
           setLastSavedAt(workspace.course.savedAt);
           goTo("app");
@@ -194,23 +186,6 @@ function App() {
       setTimeout(() => { isInitializedRef.current = true; }, 0);
     }
     init();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === "PASSWORD_RECOVERY" && session?.user) {
-        setCurrentUser(makeSessionUser(session.user));
-        setAuthStep("password-reset");
-        setAuthMessage("أدخل كلمة المرور الجديدة.");
-        goTo("login");
-      } else if (event === "SIGNED_IN" && session?.user) {
-        setCurrentUser(makeSessionUser(session.user));
-      } else if (event === "SIGNED_OUT") {
-        setCurrentUser(null);
-        setState(starterState);
-        setAuthStep("start");
-      }
-    });
-
-    return () => subscription.unsubscribe();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -416,19 +391,14 @@ function App() {
   }
 
   async function signInWithGoogle() {
-    setAuthMessage("جارٍ التوجيه إلى جوجل...");
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: window.location.origin }
-    });
-    if (error) setAuthMessage(error.message);
+    setAuthMessage("الدخول بجوجل يحتاج نطاق مصادقة مخصص. استخدم البريد الإلكتروني حاليًا.");
   }
 
-  async function openAuthenticatedWorkspace(user: { id: string; email?: string; user_metadata?: Record<string, unknown> }) {
-    const sessionUser = makeSessionUser(user);
+  async function openAuthenticatedWorkspace(user: SessionUser, profileExists?: boolean) {
+    const sessionUser = user;
     setCurrentUser(sessionUser);
-    const { data: profile } = await supabase.from("profiles").select("id").eq("id", user.id).single();
-    if (!profile) {
+    const hasProfile = profileExists ?? (await authApi.getSession()).profileExists;
+    if (!hasProfile) {
       setProfileDraft(d => ({ ...d, fullName: sessionUser.fullName || "" }));
       setAuthStep("profile-setup");
       setAuthMessage("");
@@ -448,12 +418,13 @@ function App() {
       return;
     }
     setAuthMessage("جارٍ تسجيل الدخول...");
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password: authPassword });
-    if (error || !data.user) {
+    try {
+      const data = await authApi.signInWithPassword(email, authPassword);
+      if (!data.session?.user) throw new Error();
+      await openAuthenticatedWorkspace(data.session.user, data.profileExists);
+    } catch {
       setAuthMessage("تعذر تسجيل الدخول. تحقق من البريد وكلمة المرور.");
-      return;
     }
-    await openAuthenticatedWorkspace(data.user);
   }
 
   async function signUpWithEmailPassword() {
@@ -463,20 +434,16 @@ function App() {
       return;
     }
     setAuthMessage("جارٍ إنشاء الحساب...");
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password: authPassword,
-      options: { emailRedirectTo: `${window.location.origin}/#/login` }
-    });
-    if (error) {
-      setAuthMessage(error.message);
-      return;
+    try {
+      const data = await authApi.signUp(email, authPassword, `${window.location.origin}/#/login`);
+      if (data.session?.user) {
+        await openAuthenticatedWorkspace(data.session.user, data.profileExists);
+        return;
+      }
+      setAuthMessage("تم إنشاء الحساب. تحقق من بريدك الإلكتروني لتأكيد الحساب ثم سجّل الدخول.");
+    } catch (err) {
+      setAuthMessage((err as Error).message || "تعذّر إنشاء الحساب.");
     }
-    if (data.session && data.user) {
-      await openAuthenticatedWorkspace(data.user);
-      return;
-    }
-    setAuthMessage("تم إنشاء الحساب. تحقق من بريدك الإلكتروني لتأكيد الحساب ثم سجّل الدخول.");
   }
 
   async function resetPassword() {
@@ -486,14 +453,12 @@ function App() {
       return;
     }
     setAuthMessage("جارٍ إرسال رابط إعادة ضبط كلمة المرور...");
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/#/login`
-    });
-    if (error) {
-      setAuthMessage(error.message);
-      return;
+    try {
+      await authApi.resetPassword(email, `${window.location.origin}/#/login`);
+      setAuthMessage("تم إرسال رابط إعادة ضبط كلمة المرور إلى بريدك الإلكتروني.");
+    } catch (err) {
+      setAuthMessage((err as Error).message || "تعذّر إرسال رابط إعادة الضبط.");
     }
-    setAuthMessage("تم إرسال رابط إعادة ضبط كلمة المرور إلى بريدك الإلكتروني.");
   }
 
   async function updateRecoveredPassword() {
@@ -502,24 +467,28 @@ function App() {
       return;
     }
     setAuthMessage("جارٍ تحديث كلمة المرور...");
-    const { data, error } = await supabase.auth.updateUser({ password: authPassword });
-    if (error || !data.user) {
-      setAuthMessage(error?.message || "تعذر تحديث كلمة المرور.");
-      return;
+    try {
+      const data = await authApi.updatePassword(authPassword);
+      if (!data.session?.user) throw new Error();
+      setAuthMessage("تم تحديث كلمة المرور.");
+      setAuthPassword("");
+      await openAuthenticatedWorkspace(data.session.user, data.profileExists);
+    } catch (err) {
+      setAuthMessage((err as Error).message || "تعذر تحديث كلمة المرور.");
     }
-    setAuthMessage("تم تحديث كلمة المرور.");
-    setAuthPassword("");
-    await openAuthenticatedWorkspace(data.user);
   }
 
   async function sendEmailOtp() {
     const email = authEmail.trim().toLowerCase();
     if (!email) { setAuthMessage("أدخل البريد الإلكتروني أولاً."); return; }
     setAuthMessage("جارٍ إرسال رمز التحقق...");
-    const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
-    if (error) { setAuthMessage(error.message); return; }
-    setAuthMessage("تم الإرسال! تحقق من بريدك الإلكتروني.");
-    setAuthStep("otp-sent");
+    try {
+      await authApi.sendOtp(email);
+      setAuthMessage("تم الإرسال! تحقق من بريدك الإلكتروني.");
+      setAuthStep("otp-sent");
+    } catch (err) {
+      setAuthMessage((err as Error).message || "تعذّر إرسال رمز التحقق.");
+    }
   }
 
   async function verifyEmailOtp() {
@@ -527,9 +496,13 @@ function App() {
     const token = otpCode.trim();
     if (!token || token.length < 6) { setAuthMessage("أدخل رمز التحقق المكون من 6 أرقام."); return; }
     setAuthMessage("جارٍ التحقق...");
-    const { data, error } = await supabase.auth.verifyOtp({ email, token, type: "email" });
-    if (error || !data.user) { setAuthMessage("الرمز غير صحيح أو انتهت صلاحيته."); return; }
-    await openAuthenticatedWorkspace(data.user);
+    try {
+      const data = await authApi.verifyOtp(email, token);
+      if (!data.session?.user) throw new Error();
+      await openAuthenticatedWorkspace(data.session.user, data.profileExists);
+    } catch {
+      setAuthMessage("الرمز غير صحيح أو انتهت صلاحيته.");
+    }
   }
 
   async function completeProfileSetup() {
@@ -542,19 +515,19 @@ function App() {
     setIsBusy(true);
     setAuthMessage("جارٍ حفظ البيانات...");
     try {
+      let nextUser = currentUser;
       if (fullName.trim() !== currentUser.fullName) {
-        await supabase.auth.updateUser({ data: { full_name: fullName.trim() } });
-        setCurrentUser({ ...currentUser, fullName: fullName.trim() });
+        const updatedUser = await authApi.updateUserMetadata({ full_name: fullName.trim() });
+        nextUser = updatedUser ? { ...currentUser, ...updatedUser } : { ...currentUser, fullName: fullName.trim() };
+        setCurrentUser(nextUser);
       }
-      const { error } = await supabase.from("profiles").upsert({
-        id: currentUser.id,
-        college_name: collegeName.trim(),
-        department_name: departmentName.trim(),
-        major_name: majorName.trim(),
-        trainer_name: fullName.trim(),
-        employee_number: employeeNumber.trim()
-      }, { onConflict: "id" });
-      if (error) throw new Error("تعذّر حفظ بيانات الملف الشخصي.");
+      await saveProfile(nextUser.id, {
+        collegeName: collegeName.trim(),
+        departmentName: departmentName.trim(),
+        majorName: majorName.trim(),
+        trainerName: fullName.trim(),
+        employeeNumber: employeeNumber.trim()
+      });
       setState({
         ...starterState,
         account: { collegeName: collegeName.trim(), departmentName: departmentName.trim(), majorName: majorName.trim() },
@@ -572,7 +545,7 @@ function App() {
   }
 
   async function logoutUser() {
-    await supabase.auth.signOut();
+    await authApi.signOut();
     setCurrentUser(null);
     setState(starterState);
     setLastSavedAt("");
