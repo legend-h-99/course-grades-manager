@@ -23,7 +23,6 @@ import {
 } from "lucide-react";
 import {
   applyCourseSection,
-  generateCourseCode,
   getClassStats,
   getGradeValue,
   getMaxPossibleTotal,
@@ -31,11 +30,9 @@ import {
   getTraineeTotalsWeighted,
   isWeightedMode,
   kindLabel,
-  mapRowsToTrainees,
   normalizeCourseCode,
   numberOrZero,
   starterState,
-  today,
   trainerEntry,
   withCourseTrainer,
   type ClassStats,
@@ -43,19 +40,48 @@ import {
 import "./styles.css";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { authApi } from "./api";
+// ── Core use cases ──────────────────────────────────────────────────────────
 import {
-  clearWorkspace,
-  findCourseByCode as dbFindCourseByCode,
-  joinCourse,
-  loadWorkspace,
-  saveProfile,
-  saveWorkspace,
-  type CoursePreview
-} from "./storage";
-import { exportGradesWorkbook, readTraineeRows } from "./excel";
-import { buildTraineeReportHtml } from "./reporting";
+  loadWorkspace as loadWorkspaceUC,
+  saveWorkspace as saveWorkspaceUC,
+  saveProfile as saveProfileUC,
+  clearWorkspace as clearWorkspaceUC,
+  findCourse as findCourseUC,
+  joinCourse as joinCourseUC,
+} from "./core/use-cases/workspace";
+import {
+  generateCourseCode,
+  addAssessment as addAssessmentUC,
+  updateTrainee as updateTraineeUC,
+  defaultAssessmentDraft,
+} from "./core/use-cases/course";
+import {
+  updateGrade as updateGradeUC,
+  importTraineesFromFile,
+  addManualTrainees as addManualTraineesUC,
+} from "./core/use-cases/grades";
+import {
+  signInWithPassword as signInUC,
+  signUp as signUpUC,
+  sendOtp as sendOtpUC,
+  verifyOtp as verifyOtpUC,
+  resetPassword as resetPasswordUC,
+  updateRecoveredPassword as updateRecoveredPasswordUC,
+  signOut as signOutUC,
+} from "./core/use-cases/auth";
+// ── Infrastructure (composition root only) ──────────────────────────────────
+import { WorkspaceRepository } from "./infrastructure/WorkspaceRepository";
+import { AuthGateway } from "./infrastructure/AuthGateway";
+import { ExcelFileParser } from "./infrastructure/ExcelFileParser";
+import { PrintReportService } from "./infrastructure/PrintReportService";
+import type { CoursePreview } from "./core/ports";
 import type { AccountProfile, AppPage, AppState, Assessment, AssessmentKind, CourseSetup, Grade, SessionUser, Trainee, TrainerProfile } from "./types";
+
+// ── Composition root — wire infrastructure to ports once at module level ────
+const workspaceRepo = new WorkspaceRepository();
+const authGateway = new AuthGateway();
+const fileParser = new ExcelFileParser();
+const reporter = new PrintReportService();
 
 const AUTO_SAVE_DELAY_MS = 3 * 60 * 1000;
 
@@ -129,13 +155,7 @@ function App() {
   const [isTraineeSheetOpen, setIsTraineeSheetOpen] = useState(false);
   const [importMessage, setImportMessage] = useState("");
   const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
-  const [assessmentDraft, setAssessmentDraft] = useState({
-    name: "",
-    kind: "theory" as AssessmentKind,
-    maxScore: 10,
-    date: today(),
-    weight: 0,
-  });
+  const [assessmentDraft, setAssessmentDraft] = useState(() => defaultAssessmentDraft("theory"));
 
   const isInitializedRef = useRef(false);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -156,7 +176,7 @@ function App() {
       if (!user || !s.course.code || isBusyRef.current) return;
       try {
         const nextState = withCourseTrainer(user.id, s);
-        const saveResult = await saveWorkspace(nextState);
+        const saveResult = await saveWorkspaceUC(workspaceRepo, nextState);
         if (saveResult) {
           setState((current) => ({ ...current, course: { ...current.course, ...saveResult } }));
         }
@@ -174,7 +194,7 @@ function App() {
   useEffect(() => {
     async function init() {
       try {
-        const oauth = await authApi.completeOAuthCallback();
+        const oauth = await authGateway.completeOAuthCallback();
         if (oauth.session?.user) {
           await openAuthenticatedWorkspace(oauth.session.user, oauth.profileExists);
           setIsLoading(false);
@@ -186,7 +206,7 @@ function App() {
         goTo("login");
       }
 
-      const { session, profileExists } = await authApi.getSession();
+      const { session, profileExists } = await authGateway.getSession();
       if (session?.user) {
         const sessionUser = session.user;
         setCurrentUser(sessionUser);
@@ -195,7 +215,7 @@ function App() {
           setAuthStep("profile-setup");
           goTo("login");
         } else {
-          const workspace = await loadWorkspace();
+          const workspace = await loadWorkspaceUC(workspaceRepo);
           setState(workspace);
           setLastSavedAt(workspace.course.savedAt);
           goTo("app");
@@ -209,7 +229,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    setAssessmentDraft((draft) => ({ ...draft, kind: state.course.kind }));
+    setAssessmentDraft((draft) => ({ ...draft, kind: state.course.kind as AssessmentKind }));
   }, [state.course.kind]);
 
   useEffect(() => {
@@ -387,7 +407,7 @@ function App() {
     if (!setupReady || !currentUser || isBusy) return;
     setIsBusy(true);
     try {
-      const courseCode = state.course.code || generateCourseCode([]);
+      const courseCode = state.course.code || generateCourseCode();
       const course = { ...state.course, code: courseCode, savedAt: new Date().toISOString() };
       const nextStateBase = {
         ...state,
@@ -396,7 +416,7 @@ function App() {
       };
       const nextState = withCourseTrainer(currentUser.id, nextStateBase);
       setState(nextState);
-      const saveResult = await saveWorkspace(nextState);
+      const saveResult = await saveWorkspaceUC(workspaceRepo, nextState);
       if (saveResult) {
         setState((current) => ({ ...current, course: { ...current.course, ...saveResult } }));
       }
@@ -411,20 +431,20 @@ function App() {
 
   async function signInWithGoogle() {
     setAuthMessage("جارٍ تحويلك إلى Google...");
-    authApi.signInWithGoogle();
+    authGateway.signInWithGoogle();
   }
 
   async function openAuthenticatedWorkspace(user: SessionUser, profileExists?: boolean) {
     const sessionUser = user;
     setCurrentUser(sessionUser);
-    const hasProfile = profileExists ?? (await authApi.getSession()).profileExists;
+    const hasProfile = profileExists ?? (await authGateway.getSession()).profileExists;
     if (!hasProfile) {
       setProfileDraft(d => ({ ...d, fullName: sessionUser.fullName || "" }));
       setAuthStep("profile-setup");
       setAuthMessage("");
       return;
     }
-    const workspace = await loadWorkspace();
+    const workspace = await loadWorkspaceUC(workspaceRepo);
     setState(workspace);
     setLastSavedAt(workspace.course.savedAt);
     setAuthMessage("");
@@ -432,14 +452,9 @@ function App() {
   }
 
   async function signInWithEmailPassword() {
-    const email = authEmail.trim().toLowerCase();
-    if (!email || !authPassword) {
-      setAuthMessage("أدخل البريد الإلكتروني وكلمة المرور.");
-      return;
-    }
     setAuthMessage("جارٍ تسجيل الدخول...");
     try {
-      const data = await authApi.signInWithPassword(email, authPassword);
+      const data = await signInUC(authGateway, authEmail, authPassword);
       if (!data.session?.user) throw new Error();
       await openAuthenticatedWorkspace(data.session.user, data.profileExists);
     } catch {
@@ -448,14 +463,9 @@ function App() {
   }
 
   async function signUpWithEmailPassword() {
-    const email = authEmail.trim().toLowerCase();
-    if (!email || authPassword.length < 6) {
-      setAuthMessage("أدخل بريدًا صحيحًا وكلمة مرور من 6 أحرف على الأقل.");
-      return;
-    }
     setAuthMessage("جارٍ إنشاء الحساب...");
     try {
-      const data = await authApi.signUp(email, authPassword, `${window.location.origin}/#/login`);
+      const data = await signUpUC(authGateway, authEmail, authPassword, `${window.location.origin}/#/login`);
       if (data.session?.user) {
         await openAuthenticatedWorkspace(data.session.user, data.profileExists);
         return;
@@ -467,14 +477,9 @@ function App() {
   }
 
   async function resetPassword() {
-    const email = authEmail.trim().toLowerCase();
-    if (!email) {
-      setAuthMessage("أدخل البريد الإلكتروني أولًا لإرسال رابط إعادة الضبط.");
-      return;
-    }
     setAuthMessage("جارٍ إرسال رابط إعادة ضبط كلمة المرور...");
     try {
-      await authApi.resetPassword(email, `${window.location.origin}/#/login`);
+      await resetPasswordUC(authGateway, authEmail, `${window.location.origin}/#/login`);
       setAuthMessage("تم إرسال رابط إعادة ضبط كلمة المرور إلى بريدك الإلكتروني.");
     } catch (err) {
       setAuthMessage((err as Error).message || "تعذّر إرسال رابط إعادة الضبط.");
@@ -482,13 +487,9 @@ function App() {
   }
 
   async function updateRecoveredPassword() {
-    if (authPassword.length < 6) {
-      setAuthMessage("أدخل كلمة مرور جديدة من 6 أحرف على الأقل.");
-      return;
-    }
     setAuthMessage("جارٍ تحديث كلمة المرور...");
     try {
-      const data = await authApi.updatePassword(authPassword);
+      const data = await updateRecoveredPasswordUC(authGateway, authPassword);
       if (!data.session?.user) throw new Error();
       setAuthMessage("تم تحديث كلمة المرور.");
       setAuthPassword("");
@@ -499,11 +500,9 @@ function App() {
   }
 
   async function sendEmailOtp() {
-    const email = authEmail.trim().toLowerCase();
-    if (!email) { setAuthMessage("أدخل البريد الإلكتروني أولاً."); return; }
     setAuthMessage("جارٍ إرسال رمز التحقق...");
     try {
-      await authApi.sendOtp(email);
+      await sendOtpUC(authGateway, authEmail);
       setAuthMessage("تم الإرسال! تحقق من بريدك الإلكتروني.");
       setAuthStep("otp-sent");
     } catch (err) {
@@ -512,12 +511,9 @@ function App() {
   }
 
   async function verifyEmailOtp() {
-    const email = authEmail.trim().toLowerCase();
-    const token = otpCode.trim();
-    if (!token || token.length < 6) { setAuthMessage("أدخل رمز التحقق المكون من 6 أرقام."); return; }
     setAuthMessage("جارٍ التحقق...");
     try {
-      const data = await authApi.verifyOtp(email, token);
+      const data = await verifyOtpUC(authGateway, authEmail, otpCode);
       if (!data.session?.user) throw new Error();
       await openAuthenticatedWorkspace(data.session.user, data.profileExists);
     } catch {
@@ -537,11 +533,11 @@ function App() {
     try {
       let nextUser = currentUser;
       if (fullName.trim() !== currentUser.fullName) {
-        const updatedUser = await authApi.updateUserMetadata({ full_name: fullName.trim() });
+        const updatedUser = await authGateway.updateUserMetadata({ full_name: fullName.trim() });
         nextUser = updatedUser ? { ...currentUser, ...updatedUser } : { ...currentUser, fullName: fullName.trim() };
         setCurrentUser(nextUser);
       }
-      await saveProfile({
+      await saveProfileUC(workspaceRepo, {
         collegeName: collegeName.trim(),
         departmentName: departmentName.trim(),
         majorName: majorName.trim(),
@@ -565,7 +561,7 @@ function App() {
   }
 
   async function logoutUser() {
-    await authApi.signOut();
+    await signOutUC(authGateway);
     setCurrentUser(null);
     setState(starterState);
     setLastSavedAt("");
@@ -584,7 +580,7 @@ function App() {
     try {
       const nextState = withCourseTrainer(currentUser.id, state);
       setState(nextState);
-      const saveResult = await saveWorkspace(nextState);
+      const saveResult = await saveWorkspaceUC(workspaceRepo, nextState);
       if (saveResult) {
         setState((current) => ({ ...current, course: { ...current.course, ...saveResult } }));
       }
@@ -601,7 +597,7 @@ function App() {
     if (!currentUser || isBusy) return;
     setIsBusy(true);
     try {
-      const workspace = await loadWorkspace();
+      const workspace = await loadWorkspaceUC(workspaceRepo);
       setState(workspace);
       setLastSavedAt(workspace.course.savedAt);
       toast("تم استدعاء آخر نسخة محفوظة.", "success");
@@ -613,16 +609,15 @@ function App() {
   }
 
   async function findCourseByCode() {
-    const code = normalizeCourseCode(courseCodeQuery);
-    if (!code) {
-      setCourseLookup(null);
-      setCourseLookupMessage("أدخل رمز المقرر أولًا.");
-      return;
-    }
     setCourseLookupMessage("جارٍ البحث...");
-    const record = await dbFindCourseByCode(code);
-    setCourseLookup(record);
-    setCourseLookupMessage(record ? "تم العثور على رمز المقرر. يمكنك الانضمام ثم ستظهر بياناته كاملة." : "لم يتم العثور على مقرر بهذا الرمز.");
+    try {
+      const record = await findCourseUC(workspaceRepo, courseCodeQuery);
+      setCourseLookup(record);
+      setCourseLookupMessage(record ? "تم العثور على رمز المقرر. يمكنك الانضمام ثم ستظهر بياناته كاملة." : "لم يتم العثور على مقرر بهذا الرمز.");
+    } catch (err) {
+      setCourseLookup(null);
+      setCourseLookupMessage((err as Error).message);
+    }
   }
 
   async function joinCourseByCode() {
@@ -636,8 +631,8 @@ function App() {
     }
     setIsBusy(true);
     try {
-      await joinCourse(courseLookup, state.trainer.name || currentUser.fullName, state.trainer.employeeNumber);
-      const workspace = await loadWorkspace();
+      await joinCourseUC(workspaceRepo, courseLookup.code, state.trainer.name || currentUser.fullName, state.trainer.employeeNumber);
+      const workspace = await loadWorkspaceUC(workspaceRepo);
       setState(workspace);
       setLastSavedAt(workspace.course.savedAt);
       setCourseLookupMessage("تم الانضمام للمقرر.");
@@ -669,93 +664,59 @@ function App() {
     setImportMessage("");
 
     try {
-      const rows = await readTraineeRows(file);
-      const trainees = mapRowsToTrainees(rows, state.course);
-
+      const trainees = await importTraineesFromFile(fileParser, file, state.course);
       setState((current) => ({ ...current, trainees, grades: [] }));
       setActiveCardId(trainees[0]?.id ?? null);
       setImportMessage(`تم استيراد ${trainees.length} متدرب.`);
-    } catch {
-      setImportMessage("تعذر قراءة الملف. استخدم ملف Excel بصيغة xlsx أو ملف CSV.");
+    } catch (err) {
+      setImportMessage((err as Error).message || "تعذر قراءة الملف. استخدم ملف Excel بصيغة xlsx أو ملف CSV.");
     } finally {
       event.target.value = "";
     }
   }
 
   function addManualNames() {
-    const rows = manualNames
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line, index) => {
-        const parts = line.split(/[,،\t]/).map((part) => part.trim()).filter(Boolean);
-        if (parts.length >= 2) return { "الرقم التدريبي": parts[0], "اسم المتدرب": parts.slice(1).join(" ") };
-        return { "الرقم التدريبي": String(state.trainees.length + index + 1), "اسم المتدرب": parts[0] };
-      });
-    const trainees = mapRowsToTrainees(rows, state.course).map((trainee) => {
-      if (manageSectionKind === "all" || !manageSectionNumber.trim()) return trainee;
-      const sectionNumber = manageSectionNumber.trim();
-      return manageSectionKind === "theory"
-        ? { ...trainee, theorySection: sectionNumber }
-        : { ...trainee, practicalSection: sectionNumber };
-    });
-    if (!trainees.length) return;
-
-    setState((current) => ({ ...current, trainees: [...current.trainees, ...trainees] }));
-    setManualNames("");
-    setIsTraineeSheetOpen(false);
-    setActiveCardId(trainees[0].id);
+    try {
+      const merged = addManualTraineesUC(
+        state.trainees,
+        manualNames,
+        state.course,
+        manageSectionKind,
+        manageSectionNumber,
+      );
+      setState((current) => ({ ...current, trainees: merged }));
+      setManualNames("");
+      setIsTraineeSheetOpen(false);
+      setActiveCardId(merged[state.trainees.length]?.id ?? null);
+    } catch (err) {
+      toast((err as Error).message, "error");
+    }
   }
 
   function updateTrainee(id: string, field: keyof Trainee, value: string) {
     setState((current) => ({
       ...current,
-      trainees: current.trainees.map((trainee) =>
-        trainee.id === id ? { ...trainee, [field]: value } : trainee
-      )
+      trainees: updateTraineeUC(current.trainees, id, field, value),
     }));
   }
 
   function addAssessment() {
-    if (!assessmentDraft.name.trim() || assessmentDraft.maxScore <= 0) return;
-    setState((current) => ({
-      ...current,
-      assessments: [
-        ...current.assessments,
-        {
-          id: crypto.randomUUID(),
-          name: assessmentDraft.name.trim(),
-          kind: assessmentDraft.kind,
-          maxScore: assessmentDraft.maxScore,
-          date: assessmentDraft.date,
-          weight: assessmentDraft.weight,
-        }
-      ]
-    }));
-    setAssessmentDraft({ name: "", kind: state.course.kind, maxScore: 10, date: today(), weight: 0 });
+    try {
+      setState((current) => ({
+        ...current,
+        assessments: addAssessmentUC(current.assessments, assessmentDraft),
+      }));
+      setAssessmentDraft(defaultAssessmentDraft(state.course.kind));
+    } catch (err) {
+      toast((err as Error).message, "error");
+    }
   }
 
-  function updateGrade(traineeId: string, assessmentId: string, score: string) {
-    const assessment = state.assessments.find((item) => item.id === assessmentId);
-    const nextScore = score === "" ? "" : Math.min(Math.max(Number(score), 0), assessment?.maxScore ?? 100);
-
-    setState((current) => {
-      const existing = current.grades.find(
-        (grade) => grade.traineeId === traineeId && grade.assessmentId === assessmentId
-      );
-      if (existing) {
-        return {
-          ...current,
-          grades: current.grades.map((grade) =>
-            grade === existing ? { ...grade, score: nextScore } : grade
-          )
-        };
-      }
-      return {
-        ...current,
-        grades: [...current.grades, { traineeId, assessmentId, score: nextScore }]
-      };
-    });
+  function updateGrade(traineeId: string, assessmentId: string, rawScore: string) {
+    setState((current) => ({
+      ...current,
+      grades: updateGradeUC(current.grades, traineeId, assessmentId, rawScore, current.assessments),
+    }));
   }
 
   async function exportWorkbook() {
@@ -768,7 +729,7 @@ function App() {
     if (!traineesForExport.length) return;
     setIsBusy(true);
     try {
-      await exportGradesWorkbook({
+      await reporter.exportGrades({
         state,
         trainees: traineesForExport,
         courseTrainers,
@@ -791,7 +752,7 @@ function App() {
         setConfirmDialog(null);
         setIsBusy(true);
         try {
-          await clearWorkspace();
+          await clearWorkspaceUC(workspaceRepo);
           setState(starterState);
           setActiveCardId(null);
           setManualNames("");
@@ -807,10 +768,11 @@ function App() {
   }
 
   function printTraineeReport(trainee: Trainee) {
-    const win = window.open("", "_blank", "width=680,height=900");
-    if (!win) { toast("لم يتمكن المتصفح من فتح نافذة الطباعة.", "error"); return; }
-    win.document.write(buildTraineeReportHtml(trainee, state, courseTrainers));
-    win.document.close();
+    try {
+      reporter.printTrainee(trainee, state, courseTrainers);
+    } catch (err) {
+      toast((err as Error).message, "error");
+    }
   }
 
   if (isLoading) {
