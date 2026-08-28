@@ -98,6 +98,24 @@ function normalizeSession(payload: ApiAuthResponse) {
 
 export const authApi = {
   async completeOAuthCallback() {
+    const errorDescription = new URLSearchParams(window.location.search).get("error_description");
+    if (errorDescription) {
+      window.history.replaceState(null, "", "/#/login");
+      throw new Error(decodeURIComponent(errorDescription));
+    }
+
+    // Code-based flow: Worker handles Google OAuth exchange
+    const searchParams = new URLSearchParams(window.location.search);
+    const code = searchParams.get("code");
+    if (code) {
+      const payload = await request<ApiAuthResponse>("/api/auth/google/exchange", body({ code }), false);
+      if (!payload.session) throw new Error("تعذّر إكمال تسجيل الدخول.");
+      writeStoredSession(payload.session);
+      window.history.replaceState(null, "", "/#/login");
+      return { session: readStoredSession(), profileExists: Boolean(payload.profileExists) };
+    }
+
+    // Legacy: access_token in URL hash (fallback)
     const tokens = oauthParamsFromLocation();
     if (!tokens?.accessToken) return { session: null, profileExists: false };
 

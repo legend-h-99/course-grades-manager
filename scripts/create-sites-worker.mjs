@@ -112,12 +112,37 @@ async function handleAuth(request, env, pathname) {
   }
 
   if (pathname === "/api/auth/google") {
+    if (!env.GOOGLE_CLIENT_ID) throw new Error("إعدادات Google غير مكتملة.");
+    const redirectUri = new URL("/auth/callback", url.origin).toString();
+    const googleUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+    googleUrl.searchParams.set("client_id", env.GOOGLE_CLIENT_ID);
+    googleUrl.searchParams.set("redirect_uri", redirectUri);
+    googleUrl.searchParams.set("response_type", "code");
+    googleUrl.searchParams.set("scope", "openid email profile");
+    googleUrl.searchParams.set("access_type", "offline");
+    googleUrl.searchParams.set("prompt", "select_account");
+    return Response.redirect(googleUrl.toString(), 302);
+  }
+
+  if (pathname === "/api/auth/google/exchange") {
     requireConfig(env);
-    const redirectTo = url.searchParams.get("redirectTo") || new URL("/auth/callback", url.origin).toString();
-    const authUrl = new URL("/auth/v1/authorize", env.SUPABASE_URL);
-    authUrl.searchParams.set("provider", "google");
-    authUrl.searchParams.set("redirect_to", redirectTo);
-    return Response.redirect(authUrl.toString(), 302);
+    if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) throw new Error("إعدادات Google غير مكتملة.");
+    const body = await readBody(request);
+    const code = body.code;
+    if (!code) return error("رمز التفويض مفقود.");
+    const redirectUri = new URL("/auth/callback", url.origin).toString();
+    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ code, client_id: env.GOOGLE_CLIENT_ID, client_secret: env.GOOGLE_CLIENT_SECRET, redirect_uri: redirectUri, grant_type: "authorization_code" }).toString(),
+    });
+    const tokenData = await tokenResponse.json();
+    if (!tokenResponse.ok || !tokenData.id_token) throw new Error(tokenData.error_description || "فشل التحقق من Google.");
+    const data = await supabase(env, "/auth/v1/token?grant_type=id_token", {
+      method: "POST",
+      body: { provider: "google", id_token: tokenData.id_token, access_token: tokenData.access_token },
+    });
+    return json(sessionPayload(data, await profileExists(env, data.access_token, data.user.id)));
   }
 
   if (pathname === "/api/auth/sign-in") {

@@ -226,6 +226,14 @@ https://nhiylmayomuvdpvdlrjx.supabase.co/auth/v1/callback
 ```text
 https://sanadapp.pro/*
 https://www.sanadapp.pro/*
+https://sanadapp.pro/auth/callback
+```
+
+وعند استخدام Google OAuth المباشر عبر الـ Worker أضف في Cloudflare كـ Secrets:
+
+```text
+GOOGLE_CLIENT_ID
+GOOGLE_CLIENT_SECRET
 ```
 
 ## ملاحظات مهمة
