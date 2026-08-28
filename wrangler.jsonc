@@ -1,0 +1,13 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "course-grades-manager",
+  "main": "dist/server/index.js",
+  "compatibility_date": "2026-08-28",
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "./dist/public"
+  },
+  "observability": {
+    "enabled": true
+  }
+}
