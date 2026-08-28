@@ -41,6 +41,7 @@ import {
   type ClassStats,
 } from "./courseData";
 import "./styles.css";
+import { Button } from "@/components/ui/button";
 import { authApi } from "./api";
 import {
   clearWorkspace,
@@ -847,21 +848,21 @@ function App() {
         <div className="top-actions">
           {currentUser && <span className="session-chip">مرحبًا، {currentUser.fullName}</span>}
           {currentUser && (
-            <button className="button" onClick={logoutUser}>
+            <Button variant="outline" onClick={logoutUser}>
               <LogOut size={18} />
               خروج
-            </button>
+            </Button>
           )}
           {currentUser && (
             <>
-              <button className="button" onClick={saveNow} disabled={isBusy}>
+              <Button variant="outline" onClick={saveNow} disabled={isBusy}>
                 <Save size={18} />
                 حفظ
-              </button>
-              <button className="button" onClick={restoreWorkspace} disabled={isBusy}>
+              </Button>
+              <Button variant="outline" onClick={restoreWorkspace} disabled={isBusy}>
                 <RefreshCw size={18} />
                 استدعاء
-              </button>
+              </Button>
             </>
           )}
           {currentUser && (
@@ -898,13 +899,13 @@ function App() {
           )}
           {currentUser && (
             <>
-              <button className="button btn-export" onClick={exportWorkbook} disabled={!state.trainees.length}>
+              <Button variant="outline" className="btn-export" onClick={exportWorkbook} disabled={!state.trainees.length}>
                 <Download size={18} />
                 تصدير Excel
-              </button>
-              <button className="icon-button" onClick={resetAll} title="إعادة ضبط البيانات" aria-label="إعادة ضبط البيانات">
+              </Button>
+              <Button variant="ghost" size="icon" onClick={resetAll} title="إعادة ضبط البيانات" aria-label="إعادة ضبط البيانات">
                 <RotateCcw size={18} />
-              </button>
+              </Button>
             </>
           )}
         </div>
@@ -920,23 +921,23 @@ function App() {
             </p>
             <div className="landing-cta">
               {currentUser ? (
-                <button className="button primary" onClick={() => goTo("app")}>
+                <Button onClick={() => goTo("app")}>
                   فتح لوحة الدرجات
-                </button>
+                </Button>
               ) : (
                 <>
-                  <button className="button primary" onClick={() => goTo("login")}>
+                  <Button onClick={() => goTo("login")}>
                     <LogIn size={18} />
                     دخول
-                  </button>
-                  <button className="button" onClick={signInWithGoogle}>
+                  </Button>
+                  <Button variant="outline" onClick={signInWithGoogle}>
                     <GoogleIcon />
                     دخول بجوجل
-                  </button>
-                  <button className="button" onClick={() => goTo("register")}>
+                  </Button>
+                  <Button variant="outline" onClick={() => goTo("register")}>
                     <UserPlus size={18} />
                     إنشاء حساب
-                  </button>
+                  </Button>
                 </>
               )}
             </div>
@@ -1009,21 +1010,21 @@ function App() {
           <span>آخر حفظ: {formatSavedAt(lastSavedAt || state.course.savedAt)}</span>
         </div>
         <div className="storage-actions">
-          <button className="button primary" onClick={saveNow} disabled={isBusy}>
+          <Button onClick={saveNow} disabled={isBusy}>
             <Database size={18} />
             حفظ البيانات
-          </button>
-          <button className="button" onClick={restoreWorkspace} disabled={isBusy}>
+          </Button>
+          <Button variant="outline" onClick={restoreWorkspace} disabled={isBusy}>
             <RefreshCw size={18} />
             استدعاء آخر حفظ
-          </button>
+          </Button>
         </div>
       </section>
       <section className="mobile-workspace-actions" aria-label="إجراءات مساحة العمل">
-        <button className="button" onClick={logoutUser}>
+        <Button variant="outline" onClick={logoutUser}>
           <LogOut size={18} />
           خروج
-        </button>
+        </Button>
         <div className="export-controls" aria-label="تصدير الدرجات حسب الشعبة">
           <select
             value={exportSectionKind}
@@ -1054,14 +1055,14 @@ function App() {
             </select>
           )}
         </div>
-        <button className="button btn-export" onClick={exportWorkbook} disabled={!state.trainees.length}>
+        <Button variant="outline" className="btn-export" onClick={exportWorkbook} disabled={!state.trainees.length}>
           <Download size={18} />
           تصدير Excel
-        </button>
-        <button className="button" onClick={resetAll}>
+        </Button>
+        <Button variant="outline" onClick={resetAll}>
           <RotateCcw size={18} />
           إعادة ضبط
-        </button>
+        </Button>
       </section>
       <section className="course-code-panel" aria-label="رمز المقرر والانضمام">
         <div className="code-card">
@@ -1070,10 +1071,10 @@ function App() {
             <h2>{state.course.inviteCode || state.course.code || "سيتم توليده بعد إنشاء المقرر"}</h2>
             <span>الرمز فريد ويتكون من حروف وأرقام. شاركه مع المدرب الآخر للبحث والانضمام لنفس المقرر.</span>
           </div>
-          <button className="button" onClick={copyCourseCode} disabled={!(state.course.inviteCode || state.course.code)}>
+          <Button variant="outline" onClick={copyCourseCode} disabled={!(state.course.inviteCode || state.course.code)}>
             <Copy size={18} />
             نسخ الرمز
-          </button>
+          </Button>
           <div className="trainer-stack">
             <span>مدربو المقرر</span>
             {courseTrainers.map((trainer) => (
@@ -1096,10 +1097,10 @@ function App() {
               placeholder="مثال: A7K2M9Q4"
               onChange={(event) => setCourseCodeQuery(normalizeCourseCode(event.target.value))}
             />
-            <button className="button primary" onClick={findCourseByCode}>
+            <Button onClick={findCourseByCode}>
               <Search size={18} />
               بحث
-            </button>
+            </Button>
           </div>
           {courseLookupMessage && <p className="helper-text">{courseLookupMessage}</p>}
           {courseLookup && (
@@ -1108,9 +1109,9 @@ function App() {
                 <span>رمز المقرر</span>
                 <strong>{courseLookup.code}</strong>
               </div>
-              <button className="button primary" onClick={joinCourseByCode}>
+              <Button onClick={joinCourseByCode}>
                 الانضمام لهذا المقرر
-              </button>
+              </Button>
             </div>
           )}
         </div>
@@ -1226,10 +1227,10 @@ function App() {
               }
             />
           </label>
-          <button className="button primary setup-save" onClick={saveSetup} disabled={!setupReady}>
+          <Button className="setup-save" onClick={saveSetup} disabled={!setupReady}>
             <Save size={18} />
             إنشاء الحساب
-          </button>
+          </Button>
         </div>
         <div className="linked-trainers" aria-label="مدربو المقرر">
           <span>مدربو هذا المقرر</span>
@@ -1307,19 +1308,21 @@ function App() {
               onChange={(event) => setManualNames(event.target.value)}
             />
             <div className="names-actions">
-              <button className="button primary desktop-manual-entry" onClick={addManualNames} disabled={!manualNames.trim()}>
+              <Button className="desktop-manual-entry" onClick={addManualNames} disabled={!manualNames.trim()}>
                 <Plus size={18} />
                 إضافة الأسماء
-              </button>
-              <button className="button primary mobile-add-trigger" onClick={() => setIsTraineeSheetOpen(true)}>
+              </Button>
+              <Button className="mobile-add-trigger" onClick={() => setIsTraineeSheetOpen(true)}>
                 <Plus size={18} />
                 إضافة متدربين
-              </button>
-              <label className="button">
-                <FileUp size={18} />
-                استيراد ملف
-                <input hidden type="file" accept=".xlsx,.xls,.csv" onChange={importTrainees} />
-              </label>
+              </Button>
+              <Button variant="outline" asChild>
+                <label>
+                  <FileUp size={18} />
+                  استيراد ملف
+                  <input hidden type="file" accept=".xlsx,.xls,.csv" onChange={importTrainees} />
+                </label>
+              </Button>
               {importMessage && <p className="helper-text">{importMessage}</p>}
             </div>
           </div>
@@ -1339,12 +1342,12 @@ function App() {
                   onChange={(event) => setManualNames(event.target.value)}
                 />
                 <div className="sheet-actions">
-                  <button className="button sheet-cancel" onClick={() => setIsTraineeSheetOpen(false)}>
+                  <Button variant="outline" className="sheet-cancel" onClick={() => setIsTraineeSheetOpen(false)}>
                     إلغاء
-                  </button>
-                  <button className="button primary sheet-submit" onClick={addManualNames} disabled={!manualNames.trim()}>
+                  </Button>
+                  <Button className="sheet-submit" onClick={addManualNames} disabled={!manualNames.trim()}>
                     إضافة الأسماء
-                  </button>
+                  </Button>
                 </div>
               </section>
             </div>
@@ -1449,10 +1452,10 @@ function App() {
               value={assessmentDraft.date}
               onChange={(event) => setAssessmentDraft((draft) => ({ ...draft, date: event.target.value }))}
             />
-            <button className="button primary" onClick={addAssessment}>
+            <Button onClick={addAssessment}>
               <Plus size={18} />
               إضافة
-            </button>
+            </Button>
           </div>
           {weighted && (
             <p className="helper-text weight-notice">
@@ -1572,12 +1575,12 @@ function App() {
           <h2>سجل الدخول للمتابعة</h2>
           <p>بعد إنشاء الحساب أو تسجيل الدخول ستظهر لك خطوات إنشاء المقرر، إضافة المتدربين، ورصد الدرجات.</p>
           <div className="home-actions center">
-            <button className="button primary" onClick={() => goTo("login")}>
+            <Button onClick={() => goTo("login")}>
               تسجيل الدخول
-            </button>
-            <button className="button" onClick={() => goTo("register")}>
+            </Button>
+            <Button variant="outline" onClick={() => goTo("register")}>
               إنشاء حساب
-            </button>
+            </Button>
           </div>
         </section>
       ) : null}
@@ -1599,8 +1602,8 @@ function ConfirmDialog({ message, onConfirm, onCancel }: { message: string; onCo
       <div className="confirm-dialog" onClick={(e) => e.stopPropagation()} role="alertdialog" aria-modal="true">
         <p>{message}</p>
         <div className="confirm-actions">
-          <button className="button" onClick={onCancel}>إلغاء</button>
-          <button className="button primary" onClick={onConfirm}>تأكيد</button>
+          <Button variant="outline" onClick={onCancel}>إلغاء</Button>
+          <Button onClick={onConfirm}>تأكيد</Button>
         </div>
       </div>
     </div>
@@ -1770,10 +1773,10 @@ function AuthPanel({
               />
             </label>
             {message && <p className="auth-message">{message}</p>}
-            <button className="button primary" onClick={mode === "login" ? onEmailPasswordSignIn : onEmailPasswordSignUp}>
+            <Button onClick={mode === "login" ? onEmailPasswordSignIn : onEmailPasswordSignUp}>
               {mode === "login" ? <LogIn size={18} /> : <UserPlus size={18} />}
               {mode === "login" ? "تسجيل الدخول" : "إنشاء الحساب"}
-            </button>
+            </Button>
             {mode === "login" && (
               <div className="auth-secondary-actions">
                 <button type="button" className="auth-switch" onClick={onResetPassword}>
@@ -1803,10 +1806,10 @@ function AuthPanel({
               />
             </label>
             {message && <p className="auth-message">{message}</p>}
-            <button className="button primary" onClick={onVerifyOtp}>
+            <Button onClick={onVerifyOtp}>
               <ShieldCheck size={18} />
               تحقق من الرمز
-            </button>
+            </Button>
             <button type="button" className="auth-switch" onClick={onBackToStart}>
               تغيير البريد أو إعادة الإرسال
             </button>
@@ -1827,10 +1830,10 @@ function AuthPanel({
               />
             </label>
             {message && <p className="auth-message">{message}</p>}
-            <button className="button primary" onClick={onUpdateRecoveredPassword}>
+            <Button onClick={onUpdateRecoveredPassword}>
               <ShieldCheck size={18} />
               حفظ كلمة المرور الجديدة
-            </button>
+            </Button>
           </>
         )}
         {step === "profile-setup" && (
@@ -1877,10 +1880,10 @@ function AuthPanel({
               />
             </label>
             {message && <p className="auth-message">{message}</p>}
-            <button className="button primary" onClick={onCompleteProfile}>
+            <Button onClick={onCompleteProfile}>
               <CheckCircle2 size={18} />
               حفظ والمتابعة
-            </button>
+            </Button>
           </>
         )}
       </div>
@@ -1972,9 +1975,9 @@ function TraineeCard({
         <span>{weighted ? "المجموع الموزون" : "المجموع الكامل"}</span>
         <strong>{totals.total}</strong>
       </div>
-      <button className="button card-print-btn" onClick={() => onPrint(trainee)}>
+      <Button variant="outline" className="card-print-btn" onClick={() => onPrint(trainee)}>
         طباعة / PDF
-      </button>
+      </Button>
     </aside>
   );
 }
