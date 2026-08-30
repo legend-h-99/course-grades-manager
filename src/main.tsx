@@ -1,4 +1,6 @@
-import React, { ChangeEvent, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import React, { ChangeEvent, useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useAutoSave } from "./hooks/useAutoSave";
+import { useAuthState } from "./hooks/useAuthState";
 import { createRoot } from "react-dom/client";
 import {
   BarChart3,
@@ -17,7 +19,9 @@ import {
   RotateCcw,
   Save,
   Search,
+  Share2,
   ShieldCheck,
+  Smartphone,
   UserPlus,
   Users
 } from "lucide-react";
@@ -44,7 +48,6 @@ import { Input } from "@/components/ui/input";
 import {
   loadWorkspace as loadWorkspaceUC,
   saveWorkspace as saveWorkspaceUC,
-  saveProfile as saveProfileUC,
   clearWorkspace as clearWorkspaceUC,
   findCourse as findCourseUC,
   joinCourse as joinCourseUC,
@@ -60,15 +63,6 @@ import {
   importTraineesFromFile,
   addManualTrainees as addManualTraineesUC,
 } from "./core/use-cases/grades";
-import {
-  signInWithPassword as signInUC,
-  signUp as signUpUC,
-  sendOtp as sendOtpUC,
-  verifyOtp as verifyOtpUC,
-  resetPassword as resetPasswordUC,
-  updateRecoveredPassword as updateRecoveredPasswordUC,
-  signOut as signOutUC,
-} from "./core/use-cases/auth";
 // ── Infrastructure (composition root only) ──────────────────────────────────
 import { WorkspaceRepository } from "./infrastructure/WorkspaceRepository";
 import { AuthGateway } from "./infrastructure/AuthGateway";
@@ -82,8 +76,6 @@ const workspaceRepo = new WorkspaceRepository();
 const authGateway = new AuthGateway();
 const fileParser = new ExcelFileParser();
 const reporter = new PrintReportService();
-
-const AUTO_SAVE_DELAY_MS = 3 * 60 * 1000;
 
 type ToastItem = { id: string; message: string; type: "success" | "error" | "info" };
 
@@ -134,13 +126,6 @@ function App() {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [isBusy, setIsBusy] = useState(false);
   const [page, setPage] = useState<AppPage>(readInitialPage);
-  const [authStep, setAuthStep] = useState<"start" | "otp-sent" | "password-reset" | "profile-setup">("start");
-  const [authEmail, setAuthEmail] = useState("");
-  const [authPassword, setAuthPassword] = useState("");
-  const [authMode, setAuthMode] = useState<"login" | "register">("login");
-  const [otpCode, setOtpCode] = useState("");
-  const [profileDraft, setProfileDraft] = useState({ fullName: "", collegeName: "", departmentName: "", majorName: "", employeeNumber: "" });
-  const [authMessage, setAuthMessage] = useState("");
   const [lastSavedAt, setLastSavedAt] = useState("");
   const [courseCodeQuery, setCourseCodeQuery] = useState("");
   const [courseLookupMessage, setCourseLookupMessage] = useState("");
@@ -157,38 +142,32 @@ function App() {
   const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const [assessmentDraft, setAssessmentDraft] = useState(() => defaultAssessmentDraft("theory"));
 
-  const isInitializedRef = useRef(false);
-  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const currentUserRef = useRef<SessionUser | null>(null);
-  const stateRef = useRef<AppState>(starterState);
-  const isBusyRef = useRef(false);
-
-  useEffect(() => { currentUserRef.current = currentUser; }, [currentUser]);
-  useEffect(() => { stateRef.current = state; }, [state]);
-  useEffect(() => { isBusyRef.current = isBusy; }, [isBusy]);
-
-  useEffect(() => {
-    if (!isInitializedRef.current) return;
-    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    autoSaveTimerRef.current = setTimeout(async () => {
-      const user = currentUserRef.current;
-      const s = stateRef.current;
-      if (!user || !s.course.code || isBusyRef.current) return;
-      try {
-        const nextState = withCourseTrainer(user.id, s);
-        const saveResult = await saveWorkspaceUC(workspaceRepo, nextState);
-        if (saveResult) {
-          setState((current) => ({ ...current, course: { ...current.course, ...saveResult } }));
-        }
-        setLastSavedAt(new Date().toISOString());
-        toast("تم الحفظ التلقائي.", "success");
-      } catch {
-        // silent — manual save still available
+  const { markInitialized } = useAutoSave({
+    state,
+    currentUser,
+    isBusy,
+    workspacePort: workspaceRepo,
+    onSaved: (saveResult) => {
+      if (saveResult) {
+        setState((current) => ({ ...current, course: { ...current.course, ...saveResult } }));
       }
-    }, AUTO_SAVE_DELAY_MS);
-    return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.trainees, state.assessments, state.grades]);
+      setLastSavedAt(new Date().toISOString());
+      toast("تم الحفظ التلقائي.", "success");
+    },
+  });
+
+  const auth = useAuthState({
+    authPort: authGateway,
+    workspacePort: workspaceRepo,
+    page,
+    isBusy,
+    setIsBusy,
+    setCurrentUser,
+    setState,
+    setLastSavedAt,
+    goTo,
+    toast,
+  });
 
   // Bootstrap the app session through the local API boundary.
   useEffect(() => {
@@ -196,33 +175,22 @@ function App() {
       try {
         const oauth = await authGateway.completeOAuthCallback();
         if (oauth.session?.user) {
-          await openAuthenticatedWorkspace(oauth.session.user, oauth.profileExists);
+          await auth.openAuthenticatedWorkspace(oauth.session.user, oauth.profileExists);
           setIsLoading(false);
-          setTimeout(() => { isInitializedRef.current = true; }, 0);
+          markInitialized();
           return;
         }
       } catch (err) {
-        setAuthMessage((err as Error).message || "تعذّر إكمال تسجيل الدخول بجوجل.");
+        auth.setAuthMessage((err as Error).message || "تعذّر إكمال تسجيل الدخول بجوجل.");
         goTo("login");
       }
 
       const { session, profileExists } = await authGateway.getSession();
       if (session?.user) {
-        const sessionUser = session.user;
-        setCurrentUser(sessionUser);
-        if (!profileExists) {
-          setProfileDraft(d => ({ ...d, fullName: sessionUser.fullName || "" }));
-          setAuthStep("profile-setup");
-          goTo("login");
-        } else {
-          const workspace = await loadWorkspaceUC(workspaceRepo);
-          setState(workspace);
-          setLastSavedAt(workspace.course.savedAt);
-          goTo("app");
-        }
+        await auth.openAuthenticatedWorkspace(session.user, profileExists);
       }
       setIsLoading(false);
-      setTimeout(() => { isInitializedRef.current = true; }, 0);
+      markInitialized();
     }
     init();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -246,15 +214,10 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (currentUser && authStep !== "profile-setup" && authStep !== "password-reset" && page !== "app") {
+    if (currentUser && auth.authStep !== "profile-setup" && auth.authStep !== "password-reset" && page !== "app") {
       goTo("app");
     }
-  }, [currentUser, page, authStep]);
-
-  useEffect(() => {
-    if (page === "login") setAuthMode("login");
-    if (page === "register") setAuthMode("register");
-  }, [page]);
+  }, [currentUser, page, auth.authStep]);
 
   function toast(message: string, type: ToastItem["type"] = "info") {
     const id = crypto.randomUUID();
@@ -429,150 +392,6 @@ function App() {
     }
   }
 
-  async function signInWithGoogle() {
-    setAuthMessage("جارٍ تحويلك إلى Google...");
-    authGateway.signInWithGoogle();
-  }
-
-  async function openAuthenticatedWorkspace(user: SessionUser, profileExists?: boolean) {
-    const sessionUser = user;
-    setCurrentUser(sessionUser);
-    const hasProfile = profileExists ?? (await authGateway.getSession()).profileExists;
-    if (!hasProfile) {
-      setProfileDraft(d => ({ ...d, fullName: sessionUser.fullName || "" }));
-      setAuthStep("profile-setup");
-      setAuthMessage("");
-      return;
-    }
-    const workspace = await loadWorkspaceUC(workspaceRepo);
-    setState(workspace);
-    setLastSavedAt(workspace.course.savedAt);
-    setAuthMessage("");
-    goTo("app");
-  }
-
-  async function signInWithEmailPassword() {
-    setAuthMessage("جارٍ تسجيل الدخول...");
-    try {
-      const data = await signInUC(authGateway, authEmail, authPassword);
-      if (!data.session?.user) throw new Error();
-      await openAuthenticatedWorkspace(data.session.user, data.profileExists);
-    } catch {
-      setAuthMessage("تعذر تسجيل الدخول. تحقق من البريد وكلمة المرور.");
-    }
-  }
-
-  async function signUpWithEmailPassword() {
-    setAuthMessage("جارٍ إنشاء الحساب...");
-    try {
-      const data = await signUpUC(authGateway, authEmail, authPassword, `${window.location.origin}/#/login`);
-      if (data.session?.user) {
-        await openAuthenticatedWorkspace(data.session.user, data.profileExists);
-        return;
-      }
-      setAuthMessage("تم إنشاء الحساب. تحقق من بريدك الإلكتروني لتأكيد الحساب ثم سجّل الدخول.");
-    } catch (err) {
-      setAuthMessage((err as Error).message || "تعذّر إنشاء الحساب.");
-    }
-  }
-
-  async function resetPassword() {
-    setAuthMessage("جارٍ إرسال رابط إعادة ضبط كلمة المرور...");
-    try {
-      await resetPasswordUC(authGateway, authEmail, `${window.location.origin}/#/login`);
-      setAuthMessage("تم إرسال رابط إعادة ضبط كلمة المرور إلى بريدك الإلكتروني.");
-    } catch (err) {
-      setAuthMessage((err as Error).message || "تعذّر إرسال رابط إعادة الضبط.");
-    }
-  }
-
-  async function updateRecoveredPassword() {
-    setAuthMessage("جارٍ تحديث كلمة المرور...");
-    try {
-      const data = await updateRecoveredPasswordUC(authGateway, authPassword);
-      if (!data.session?.user) throw new Error();
-      setAuthMessage("تم تحديث كلمة المرور.");
-      setAuthPassword("");
-      await openAuthenticatedWorkspace(data.session.user, data.profileExists);
-    } catch (err) {
-      setAuthMessage((err as Error).message || "تعذر تحديث كلمة المرور.");
-    }
-  }
-
-  async function sendEmailOtp() {
-    setAuthMessage("جارٍ إرسال رمز التحقق...");
-    try {
-      await sendOtpUC(authGateway, authEmail);
-      setAuthMessage("تم الإرسال! تحقق من بريدك الإلكتروني.");
-      setAuthStep("otp-sent");
-    } catch (err) {
-      setAuthMessage((err as Error).message || "تعذّر إرسال رمز التحقق.");
-    }
-  }
-
-  async function verifyEmailOtp() {
-    setAuthMessage("جارٍ التحقق...");
-    try {
-      const data = await verifyOtpUC(authGateway, authEmail, otpCode);
-      if (!data.session?.user) throw new Error();
-      await openAuthenticatedWorkspace(data.session.user, data.profileExists);
-    } catch {
-      setAuthMessage("الرمز غير صحيح أو انتهت صلاحيته.");
-    }
-  }
-
-  async function completeProfileSetup() {
-    if (!currentUser || isBusy) return;
-    const { fullName, collegeName, departmentName, majorName, employeeNumber } = profileDraft;
-    if (!fullName.trim() || !collegeName.trim() || !departmentName.trim()) {
-      setAuthMessage("أدخل الاسم الكامل والكلية والقسم على الأقل.");
-      return;
-    }
-    setIsBusy(true);
-    setAuthMessage("جارٍ حفظ البيانات...");
-    try {
-      let nextUser = currentUser;
-      if (fullName.trim() !== currentUser.fullName) {
-        const updatedUser = await authGateway.updateUserMetadata({ full_name: fullName.trim() });
-        nextUser = updatedUser ? { ...currentUser, ...updatedUser } : { ...currentUser, fullName: fullName.trim() };
-        setCurrentUser(nextUser);
-      }
-      await saveProfileUC(workspaceRepo, {
-        collegeName: collegeName.trim(),
-        departmentName: departmentName.trim(),
-        majorName: majorName.trim(),
-        trainerName: fullName.trim(),
-        employeeNumber: employeeNumber.trim()
-      });
-      setState({
-        ...starterState,
-        account: { collegeName: collegeName.trim(), departmentName: departmentName.trim(), majorName: majorName.trim() },
-        trainer: { name: fullName.trim(), employeeNumber: employeeNumber.trim() }
-      });
-      setAuthStep("start");
-      setAuthMessage("");
-      goTo("app");
-      toast("مرحباً! تم إعداد حسابك بنجاح.", "success");
-    } catch (err) {
-      setAuthMessage((err as Error).message || "حدث خطأ أثناء الحفظ.");
-    } finally {
-      setIsBusy(false);
-    }
-  }
-
-  async function logoutUser() {
-    await signOutUC(authGateway);
-    setCurrentUser(null);
-    setState(starterState);
-    setLastSavedAt("");
-    setAuthStep("start");
-    setAuthEmail("");
-    setAuthPassword("");
-    setAuthMode("login");
-    setOtpCode("");
-    setAuthMessage("");
-    goTo("login");
-  }
 
   async function saveNow() {
     if (!currentUser || isBusy) return;
@@ -811,7 +630,7 @@ function App() {
         <div className="top-actions">
           {currentUser && <span className="session-chip">مرحبًا، {currentUser.fullName}</span>}
           {currentUser && (
-            <Button variant="outline" onClick={logoutUser}>
+            <Button variant="outline" onClick={auth.logoutUser}>
               <LogOut size={18} />
               خروج
             </Button>
@@ -877,32 +696,71 @@ function App() {
       {page === "home" && (
         <section className="landing-section" id="home">
           <div className="landing-hero">
-            <p className="landing-eyebrow">Sanad / سند</p>
-            <h2>إدارة درجات المقررات بثقة</h2>
-            <p className="landing-lead">
-              منصة عملية للمدربين لإنشاء مساحة مقرر مشتركة، استيراد المتدربين، رصد الدرجات النظرية والعملية، وتصدير النتائج بسرعة.
-            </p>
-            <div className="landing-cta">
-              {currentUser ? (
-                <Button onClick={() => goTo("app")}>
-                  فتح لوحة الدرجات
-                </Button>
-              ) : (
-                <>
-                  <Button onClick={() => goTo("login")}>
-                    <LogIn size={18} />
-                    دخول
+            <div className="landing-copy">
+              <p className="landing-eyebrow">Sanad / سند للجوال</p>
+              <h2>إدارة درجات المقررات من شاشة واحدة</h2>
+              <p className="landing-lead">
+                صفحة جوال سريعة للمدربين: أنشئ مقررًا، شارك رمزه مع زملائك، استورد المتدربين، ثم ارصد الدرجات وصدّر الكشف بدون ملفات متفرقة.
+              </p>
+              <div className="landing-cta">
+                {currentUser ? (
+                  <Button onClick={() => goTo("app")} className="landing-primary-action">
+                    <ClipboardList size={18} />
+                    فتح لوحة الدرجات
                   </Button>
-                  <Button variant="outline" onClick={signInWithGoogle}>
-                    <GoogleIcon />
-                    دخول بجوجل
-                  </Button>
-                  <Button variant="outline" onClick={() => goTo("register")}>
-                    <UserPlus size={18} />
-                    إنشاء حساب
-                  </Button>
-                </>
-              )}
+                ) : (
+                  <>
+                    <Button onClick={() => goTo("login")} className="landing-primary-action">
+                      <LogIn size={18} />
+                      ابدأ الآن
+                    </Button>
+                    <Button variant="outline" onClick={auth.signInWithGoogle}>
+                      <GoogleIcon />
+                      دخول بجوجل
+                    </Button>
+                    <Button variant="outline" onClick={() => goTo("register")}>
+                      <UserPlus size={18} />
+                      إنشاء حساب
+                    </Button>
+                  </>
+                )}
+              </div>
+              <div className="landing-trust-row" aria-label="مزايا سريعة">
+                <span><CheckCircle2 size={15} /> حفظ تلقائي</span>
+                <span><CheckCircle2 size={15} /> مشاركة مدربين</span>
+                <span><CheckCircle2 size={15} /> تصدير Excel</span>
+              </div>
+            </div>
+            <div className="landing-phone-preview" aria-label="معاينة سند على الجوال">
+              <div className="phone-frame">
+                <div className="phone-status">
+                  <span>سند</span>
+                  <strong>96%</strong>
+                </div>
+                <div className="phone-course-card">
+                  <span>مقرر مشترك</span>
+                  <strong>أساسيات الحاسب</strong>
+                  <em>رمز المقرر A7K2M9</em>
+                </div>
+                <div className="phone-score-list">
+                  <div>
+                    <span>أحمد ناصر</span>
+                    <strong>92</strong>
+                  </div>
+                  <div>
+                    <span>محمد علي</span>
+                    <strong>88</strong>
+                  </div>
+                  <div>
+                    <span>خالد عبدالله</span>
+                    <strong>95</strong>
+                  </div>
+                </div>
+                <div className="phone-export-bar">
+                  <Download size={15} />
+                  جاهز للتصدير
+                </div>
+              </div>
             </div>
           </div>
           <div className="landing-features">
@@ -935,32 +793,64 @@ function App() {
               <p>صلاحيات واضحة وتجهيز لمسار تدقيق آمن</p>
             </div>
           </div>
+          <div className="landing-mobile-flow" aria-label="خطوات العمل على الجوال">
+            <div>
+              <Smartphone size={20} />
+              <span>1</span>
+              <strong>افتح من الجوال</strong>
+              <p>واجهة مختصرة ومناسبة للمدرب أثناء المحاضرة.</p>
+            </div>
+            <div>
+              <Share2 size={20} />
+              <span>2</span>
+              <strong>شارك رمز المقرر</strong>
+              <p>يرتبط أكثر من مدرب بنفس مساحة الدرجات.</p>
+            </div>
+            <div>
+              <FileUp size={20} />
+              <span>3</span>
+              <strong>استورد ورصد</strong>
+              <p>أدخل الدرجات النظرية والعملية وصدّرها مباشرة.</p>
+            </div>
+          </div>
+          {!currentUser && (
+            <div className="mobile-sticky-cta" aria-label="بدء استخدام سند">
+              <Button onClick={() => goTo("login")}>
+                <LogIn size={18} />
+                دخول
+              </Button>
+              <Button variant="outline" onClick={() => goTo("register")}>
+                <UserPlus size={18} />
+                حساب جديد
+              </Button>
+            </div>
+          )}
         </section>
       )}
 
-      {(authStep === "profile-setup" || authStep === "password-reset" || (!currentUser && (page === "register" || page === "login"))) && (
+      {(auth.authStep === "profile-setup" || auth.authStep === "password-reset" || (!currentUser && (page === "register" || page === "login"))) && (
         <AuthPanel
-          step={authStep}
-          mode={authMode}
-          email={authEmail}
-          password={authPassword}
-          otpCode={otpCode}
-          profileDraft={profileDraft}
-          message={authMessage}
-          onEmailChange={setAuthEmail}
-          onPasswordChange={setAuthPassword}
-          onModeChange={setAuthMode}
-          onOtpChange={setOtpCode}
-          onProfileDraftChange={setProfileDraft}
-          onGoogleSignIn={signInWithGoogle}
-          onEmailPasswordSignIn={signInWithEmailPassword}
-          onEmailPasswordSignUp={signUpWithEmailPassword}
-          onResetPassword={resetPassword}
-          onUpdateRecoveredPassword={updateRecoveredPassword}
-          onSendOtp={sendEmailOtp}
-          onVerifyOtp={verifyEmailOtp}
-          onCompleteProfile={completeProfileSetup}
-          onBackToStart={() => { setAuthStep("start"); setAuthMessage(""); setOtpCode(""); }}
+          step={auth.authStep}
+          mode={auth.authMode}
+          email={auth.authEmail}
+          password={auth.authPassword}
+          otpCode={auth.otpCode}
+          profileDraft={auth.profileDraft}
+          message={auth.authMessage}
+          onEmailChange={auth.setAuthEmail}
+          onPasswordChange={auth.setAuthPassword}
+          onModeChange={auth.setAuthMode}
+          onOtpChange={auth.setOtpCode}
+          onProfileDraftChange={auth.setProfileDraft}
+          onGoogleSignIn={auth.signInWithGoogle}
+          onEmailPasswordSignIn={auth.signInWithEmailPassword}
+          onEmailPasswordSignUp={auth.signUpWithEmailPassword}
+          onResetPassword={auth.resetPassword}
+          onUpdateRecoveredPassword={auth.updateRecoveredPassword}
+          onSendOtp={auth.sendEmailOtp}
+          onVerifyOtp={auth.verifyEmailOtp}
+          onCompleteProfile={() => currentUser && auth.completeProfileSetup(currentUser)}
+          onBackToStart={() => { auth.setAuthStep("start"); auth.setAuthMessage(""); auth.setOtpCode(""); }}
         />
       )}
 
@@ -984,7 +874,7 @@ function App() {
         </div>
       </section>
       <section className="mobile-workspace-actions" aria-label="إجراءات مساحة العمل">
-        <Button variant="outline" onClick={logoutUser}>
+        <Button variant="outline" onClick={auth.logoutUser}>
           <LogOut size={18} />
           خروج
         </Button>
@@ -1300,7 +1190,7 @@ function App() {
                 <textarea
                   className="sheet-textarea"
                   value={manualNames}
-                  placeholder={"1001، محمد عبدالله\n1002، سارة أحمد\n1003، خالد محمد"}
+                  placeholder={"1001، محمد عبدالله\n1002، صالح أحمد\n1003، خالد محمد"}
                   autoFocus
                   onChange={(event) => setManualNames(event.target.value)}
                 />

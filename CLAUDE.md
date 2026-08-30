@@ -10,7 +10,7 @@ This document defines how to implement Figma designs in the **إدارة درج�
 - **Styling**: Plain CSS — single file `src/styles.css` (no Tailwind, no CSS Modules, no CSS-in-JS)
 - **Language/Direction**: Arabic, RTL (`dir="rtl"` on `<html>`)
 - **Font**: `"IBM Plex Sans Arabic"` → `"Segoe UI"` → Tahoma → Arial → sans-serif
-- **Entry point**: `src/main.tsx` (single-file React app, ~1300 lines)
+- **Entry point**: `src/main.tsx` (main app component + App state, ~2000 lines)
 - **Max container width**: `1480px` (`width: min(1480px, calc(100% - 32px))`)
 
 ---
@@ -368,9 +368,10 @@ animation: fadeUp 560ms ease both;  /* setup-panel, auth-panel, code/join cards 
 
 ### Adding New Components
 
-1. Add to `src/main.tsx` as a function component above the `App` function.
-2. Props typed inline or via `types.ts`.
-3. Do not create separate component files — the project uses a single-file architecture.
+1. Small components (< 80 lines) can live in `src/main.tsx` above the `App` function.
+2. Larger components go in `src/components/<ComponentName>.tsx`.
+3. Shared logic goes in `src/hooks/<hookName>.ts`.
+4. Props typed inline or via `types.ts`.
 
 ### Asset References
 
@@ -382,15 +383,29 @@ No external image assets in the project. Icons are SVG via lucide-react. The onl
 
 ```
 src/
-├── main.tsx       # All React components + App state (1300 lines)
-├── styles.css     # All styles (1111 lines)
-├── types.ts       # TypeScript types (AppState, Trainee, Assessment, Grade, ...)
-├── courseData.ts  # Pure business logic utilities (no side effects)
-├── storage.ts     # Supabase CRUD operations
-└── supabase.ts    # Supabase client (createClient)
+├── main.tsx            # App component + top-level state (~2000 lines)
+├── styles.css          # All styles (single CSS file)
+├── types.ts            # TypeScript types (AppState, Trainee, Assessment, Grade, …)
+├── courseData.ts       # Pure business logic utilities (no side effects)
+├── api.ts              # HTTP layer: auth, session, Supabase REST calls
+├── excel.ts            # Excel/CSV import & export
+├── reporting.ts        # Print report HTML generation
+│
+├── core/
+│   ├── ports.ts        # Port interfaces (AuthPort, WorkspacePort, …)
+│   └── use-cases/      # Application use-cases (auth, grades, course, workspace)
+│
+├── infrastructure/     # Adapters implementing core ports
+│   ├── AuthGateway.ts
+│   ├── WorkspaceRepository.ts
+│   ├── ExcelFileParser.ts
+│   └── PrintReportService.ts
+│
+├── components/ui/      # Radix-based primitives (Button, Card, Input, …)
+└── hooks/              # Custom hooks (useAuthState, useAutoSave, …) — to be extracted
 
-index.html         # dir="rtl" lang="ar", IBM Plex Sans Arabic font, favicon SVG
-vite.config.ts     # React plugin + @openai/sites-vite-plugin
+index.html              # dir="rtl" lang="ar", IBM Plex Sans Arabic font, favicon SVG
+vite.config.ts          # React plugin + @openai/sites-vite-plugin
 ```
 
 ---
@@ -408,4 +423,4 @@ When translating a Figma frame to code:
 - [ ] Focus states use `border-color #1f6f61` + `outline 3px solid rgba(31,111,97,0.14)`
 - [ ] Icons from `lucide-react` only, sized explicitly
 - [ ] Responsive: collapses at `1100px` and `760px`
-- [ ] CSS goes in `src/styles.css`, components in `src/main.tsx`
+- [ ] CSS goes in `src/styles.css`; new components in `src/components/`, hooks in `src/hooks/`

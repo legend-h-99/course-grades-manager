@@ -4,6 +4,24 @@ const worker = `const cacheHeaders = {
   "Cache-Control": "public, max-age=31536000, immutable"
 };
 
+const securityHeaders = {
+  "Content-Security-Policy": [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com",
+    "img-src 'self' data:",
+    "connect-src 'self' https://*.supabase.co https://oauth2.googleapis.com https://accounts.google.com",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'"
+  ].join("; "),
+  "X-Frame-Options": "DENY",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+  "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload"
+};
+
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -29,6 +47,39 @@ function withHeaders(response, headers) {
 async function readBody(request) {
   if (request.method === "GET" || request.method === "HEAD") return {};
   return request.json().catch(() => ({}));
+}
+
+async function getEncryptionKey(env) {
+  if (!env.FIELD_ENCRYPTION_KEY) return null;
+  try {
+    const keyData = Uint8Array.from(atob(env.FIELD_ENCRYPTION_KEY), (c) => c.charCodeAt(0));
+    return crypto.subtle.importKey("raw", keyData, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+  } catch {
+    return null;
+  }
+}
+
+async function encryptField(key, plaintext) {
+  if (!plaintext || !key) return plaintext;
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(plaintext));
+  const combined = new Uint8Array(12 + ciphertext.byteLength);
+  combined.set(iv, 0);
+  combined.set(new Uint8Array(ciphertext), 12);
+  return btoa(String.fromCharCode(...combined));
+}
+
+async function decryptField(key, value) {
+  if (!value || !key) return value;
+  try {
+    const combined = Uint8Array.from(atob(value), (c) => c.charCodeAt(0));
+    const iv = combined.slice(0, 12);
+    const data = combined.slice(12);
+    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, data);
+    return new TextDecoder().decode(plain);
+  } catch {
+    return value;
+  }
 }
 
 function requireConfig(env) {
@@ -268,13 +319,14 @@ async function loadWorkspace(env, token, userId) {
     supabase(env, "/rest/v1/course_trainers?course_id=eq." + encodeURIComponent(courseRow.id) + "&select=*", { token })
   ]);
 
-  const trainees = (traineeRows ?? []).map((t) => ({
+  const encKey = await getEncryptionKey(env);
+  const trainees = await Promise.all((traineeRows ?? []).map(async (t) => ({
     id: t.id,
-    trainingNumber: t.training_number,
-    name: t.name,
+    trainingNumber: await decryptField(encKey, t.training_number),
+    name: await decryptField(encKey, t.name),
     theorySection: t.theory_section,
     practicalSection: t.practical_section
-  }));
+  })));
   const assessments = (assessmentRows ?? []).map((a) => ({
     id: a.id,
     name: a.name,
@@ -377,14 +429,15 @@ async function saveWorkspace(env, token, userId, state) {
   if (traineesToDelete.length) {
     await supabase(env, "/rest/v1/trainees?id=in.(" + inList(traineesToDelete) + ")", { method: "DELETE", token });
   }
-  await upsert(env, token, "trainees", state.trainees.map((t) => ({
+  const encKey = await getEncryptionKey(env);
+  await upsert(env, token, "trainees", await Promise.all(state.trainees.map(async (t) => ({
     id: t.id,
     course_id: courseId,
-    training_number: t.trainingNumber,
-    name: t.name,
+    training_number: await encryptField(encKey, t.trainingNumber),
+    name: await encryptField(encKey, t.name),
     theory_section: t.theorySection,
     practical_section: t.practicalSection
-  })), "id");
+  }))), "id");
 
   const existingAssessments = await supabase(env, "/rest/v1/assessments?course_id=eq." + encodeURIComponent(courseId) + "&select=id", { token });
   const assessmentIds = state.assessments.map((assessment) => assessment.id);
@@ -486,7 +539,7 @@ export default {
 
     if (url.pathname === "/auth/callback") {
       const indexResponse = await fetchAsset(env, request, "/");
-      return withHeaders(indexResponse, { "Cache-Control": "no-store" });
+      return withHeaders(indexResponse, { "Cache-Control": "no-store", ...securityHeaders });
     }
 
     if (url.pathname.startsWith("/api/auth/")) {
@@ -514,12 +567,12 @@ export default {
     const assetResponse = await fetchAsset(env, request, url.pathname);
     if (assetResponse.ok) {
       return url.pathname.startsWith("/assets/")
-        ? withHeaders(assetResponse, cacheHeaders)
-        : withHeaders(assetResponse, { "Cache-Control": "no-store" });
+        ? withHeaders(assetResponse, { ...cacheHeaders, ...securityHeaders })
+        : withHeaders(assetResponse, { "Cache-Control": "no-store", ...securityHeaders });
     }
 
     const indexResponse = await fetchAsset(env, request, "/");
-    return withHeaders(indexResponse, { "Cache-Control": "no-store" });
+    return withHeaders(indexResponse, { "Cache-Control": "no-store", ...securityHeaders });
   }
 };
 `;

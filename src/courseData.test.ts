@@ -35,7 +35,7 @@ const weightedAssessments: Assessment[] = [
 ];
 
 const trainees: Trainee[] = [
-  { id: "t1", trainingNumber: "100", name: "سارة", theorySection: "ن-1", practicalSection: "ع-1" },
+  { id: "t1", trainingNumber: "100", name: "سعد", theorySection: "ن-1", practicalSection: "ع-1" },
   { id: "t2", trainingNumber: "101", name: "علي", theorySection: "ن-1", practicalSection: "ع-1" },
 ];
 
@@ -61,13 +61,13 @@ describe("courseData", () => {
   it("maps Arabic and English spreadsheet headers to trainees", () => {
     const rows = rowsToObjects([
       ["name", "trainingNumber", "الشعبة العملية"],
-      ["نورة", "555", "ع-2"],
+      ["ناصر", "555", "ع-2"],
     ]);
 
     const [trainee] = mapRowsToTrainees(rows, theoryCourse);
 
     expect(trainee).toMatchObject({
-      name: "نورة",
+      name: "ناصر",
       trainingNumber: "555",
       theorySection: "ن-1",
       practicalSection: "ع-2",
