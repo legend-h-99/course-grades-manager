@@ -29,8 +29,8 @@ const theoryCourse: CourseSetup = {
 
 const mixedCourse: CourseSetup = {
   name: "شبكات",
-  kind: "both",
-  sectionNumber: "ن-2",
+  kind: "practical",
+  sectionNumber: "ع-1",
   savedAt: "",
   updatedAt: "",
   inviteCode: "",
