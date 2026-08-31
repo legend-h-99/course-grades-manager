@@ -58,21 +58,23 @@ async function decryptSession(value: string): Promise<string | null> {
 }
 
 // ── OAuth CSRF state ─────────────────────────────────────────────────────
-// A random nonce stored in memory (never persisted) for the OAuth round-trip.
-// Verified in completeOAuthCallback to prevent CSRF on login.
-let _oauthState: string | null = null;
+// Stored in sessionStorage so it survives the Google redirect round-trip
+// (a full page navigation destroys JS heap but keeps sessionStorage).
+// One-time use: consumed and removed on callback.
+const oauthStateKey = "sanad.oauth_state";
 
 function generateOAuthState(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
-  _oauthState = btoa(String.fromCharCode(...bytes));
-  return _oauthState;
+  const state = btoa(String.fromCharCode(...bytes));
+  window.sessionStorage.setItem(oauthStateKey, state);
+  return state;
 }
 
 function consumeOAuthState(returned: string | null): boolean {
-  if (!returned || !_oauthState) return false;
-  const valid = returned === _oauthState;
-  _oauthState = null;
-  return valid;
+  const stored = window.sessionStorage.getItem(oauthStateKey);
+  window.sessionStorage.removeItem(oauthStateKey);
+  if (!returned || !stored) return false;
+  return returned === stored;
 }
 
 // ── Session persistence ───────────────────────────────────────────────────
