@@ -12,6 +12,12 @@
     "directory": "./dist/public",
     "run_worker_first": ["/api/*", "/auth/*"]
   },
+  // Smart placement: Cloudflare automatically routes each request to the
+  // data centre nearest the Supabase origin (ME region), keeping compute
+  // and data transit within the Gulf corridor.
+  "placement": {
+    "mode": "smart"
+  },
   "observability": {
     "enabled": true
   }

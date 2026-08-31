@@ -19,7 +19,10 @@ const securityHeaders = {
   "X-Frame-Options": "DENY",
   "Referrer-Policy": "strict-origin-when-cross-origin",
   "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
-  "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload"
+  "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+  "X-Data-Region": "ME-1",
+  "X-Content-Type-Options": "nosniff",
+  "X-Robots-Tag": "noindex, noarchive, nosnippet"
 };
 
 function json(data, status = 200) {
@@ -28,7 +31,8 @@ function json(data, status = 200) {
     headers: {
       "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "no-store",
-      "X-Content-Type-Options": "nosniff"
+      "X-Content-Type-Options": "nosniff",
+      "X-Data-Region": "ME-1"
     }
   });
 }
@@ -352,14 +356,14 @@ async function loadWorkspace(env, token, userId) {
   const member = first(await supabase(env, "/rest/v1/course_trainers?user_id=eq." + encodeURIComponent(userId) + "&select=course_id,joined_at&order=joined_at.desc&limit=1", { token }));
   if (!member?.course_id) return { ...starterState, account, trainer };
 
-  const courseRow = first(await supabase(env, "/rest/v1/courses?id=eq." + encodeURIComponent(member.course_id) + "&select=*&limit=1", { token }));
+  const courseRow = first(await supabase(env, "/rest/v1/courses?id=eq." + encodeURIComponent(member.course_id) + "&select=id,name,kind,section_number,saved_at,updated_at,code&limit=1", { token }));
   if (!courseRow) return { ...starterState, account, trainer };
 
   const inviteRow = first(await supabase(env, "/rest/v1/course_invites?course_id=eq." + encodeURIComponent(courseRow.id) + "&select=token&limit=1", { token }));
   const [traineeRows, assessmentRows, trainerRows] = await Promise.all([
-    supabase(env, "/rest/v1/trainees?course_id=eq." + encodeURIComponent(courseRow.id) + "&select=*", { token }),
-    supabase(env, "/rest/v1/assessments?course_id=eq." + encodeURIComponent(courseRow.id) + "&select=*", { token }),
-    supabase(env, "/rest/v1/course_trainers?course_id=eq." + encodeURIComponent(courseRow.id) + "&select=*", { token })
+    supabase(env, "/rest/v1/trainees?course_id=eq." + encodeURIComponent(courseRow.id) + "&select=id,training_number,name,theory_section,practical_section&order=name.asc", { token }),
+    supabase(env, "/rest/v1/assessments?course_id=eq." + encodeURIComponent(courseRow.id) + "&select=id,name,kind,max_score,date,weight&order=date.asc", { token }),
+    supabase(env, "/rest/v1/course_trainers?course_id=eq." + encodeURIComponent(courseRow.id) + "&select=user_id,trainer_name,employee_number,joined_at", { token })
   ]);
 
   const trainees = await Promise.all((traineeRows ?? []).map(async (t) => ({
@@ -385,14 +389,18 @@ async function loadWorkspace(env, token, userId) {
   }));
 
   const traineeIds = trainees.map((t) => t.id);
+  // Fetch only rows with an actual score (score IS NOT NULL and > 0 or non-empty).
+  // Empty/null scores are reconstructed client-side as ""; no need to transmit them.
   const gradeRows = traineeIds.length
-    ? await supabase(env, "/rest/v1/grades?trainee_id=in.(" + inList(traineeIds) + ")&select=*", { token })
+    ? await supabase(env, "/rest/v1/grades?trainee_id=in.(" + inList(traineeIds) + ")&select=trainee_id,assessment_id,score&score=not.is.null", { token })
     : [];
-  const grades = (gradeRows ?? []).map((g) => ({
-    traineeId: g.trainee_id,
-    assessmentId: g.assessment_id,
-    score: g.score ?? ""
-  }));
+  const grades = (gradeRows ?? [])
+    .filter((g) => g.score !== null && g.score !== "")
+    .map((g) => ({
+      traineeId: g.trainee_id,
+      assessmentId: g.assessment_id,
+      score: g.score,
+    }));
 
   return {
     account,
