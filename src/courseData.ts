@@ -86,6 +86,26 @@ export function rowsToObjects(rows: unknown[][]) {
   });
 }
 
+// Keywords that reliably appear in the header row of a student data table.
+// Used to skip metadata sections (e.g. TVTC export format "Table 1" preamble).
+const DATA_HEADER_SIGNALS = [
+  "اسم الطالب", "اسم المتدرب", "الاسم", "name",
+  "الرقم التدريبي", "رقم المتدرب", "الرقم الجامعي", "trainingnumber",
+];
+
+function norm(s: string) {
+  return s.trim().replace(/\s+/g, "").toLowerCase();
+}
+
+export function sliceToDataTable(rows: unknown[][]): unknown[][] {
+  const signals = new Set(DATA_HEADER_SIGNALS.map(norm));
+  for (let i = 0; i < rows.length; i++) {
+    const cells = rows[i].map((c) => norm(String(c ?? "")));
+    if (cells.some((c) => signals.has(c))) return rows.slice(i);
+  }
+  return rows;
+}
+
 export function parseCsv(text: string) {
   const rows: string[][] = [];
   let row: string[] = [];
@@ -117,16 +137,16 @@ export function parseCsv(text: string) {
 
   row.push(cell.trim());
   if (row.some(Boolean)) rows.push(row);
-  return rowsToObjects(rows);
+  return rowsToObjects(sliceToDataTable(rows));
 }
 
 export function mapRowsToTrainees(rows: Record<string, unknown>[], course: CourseSetup) {
   return rows
     .map((row, index) => {
       const trainingNumber =
-        pick(row, ["الرقم التدريبي", "رقم المتدرب", "رقم", "trainingNumber", "id"]) ||
+        pick(row, ["الرقم التدريبي", "رقم المتدرب", "الرقم الجامعي", "رقم", "trainingNumber", "id"]) ||
         String(index + 1);
-      const name = pick(row, ["اسم المتدرب", "الاسم", "اسم", "name"]);
+      const name = pick(row, ["اسم المتدرب", "اسم الطالب", "الاسم", "اسم", "name"]);
       if (!name) return null;
       return applyCourseSection(
         {

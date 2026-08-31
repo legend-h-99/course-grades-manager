@@ -6,18 +6,22 @@ import {
   kindLabel,
   parseCsv,
   rowsToObjects,
+  sliceToDataTable,
   today
 } from "./courseData";
 import type { AppState, AssessmentKind, CourseTrainer, Trainee } from "./types";
 import type { SheetData } from "write-excel-file/browser";
 
 export async function readTraineeRows(file: File) {
+  if (file.size > 10 * 1024 * 1024) {
+    throw new Error("حجم الملف كبير جداً (الحد الأقصى 10 ميغابايت).");
+  }
   if (file.name.toLowerCase().endsWith(".csv")) {
     return parseCsv(await file.text());
   }
 
   const { readSheet } = await import("read-excel-file/browser");
-  return rowsToObjects((await readSheet(file)) as unknown[][]);
+  return rowsToObjects(sliceToDataTable((await readSheet(file)) as unknown[][]));
 }
 
 export async function exportGradesWorkbook({
