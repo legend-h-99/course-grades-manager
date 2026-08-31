@@ -1014,6 +1014,23 @@ textarea:focus-visible {
   min-height: 30px;
 }
 
+.auth-privacy-note {
+  font-size: 12px;
+  color: #607077;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.auth-privacy-note a {
+  color: #1f6f61;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.auth-privacy-note a:hover {
+  text-decoration: underline;
+}
+
 /* Google sign-in button */
 .auth-google-btn {
   display: flex;

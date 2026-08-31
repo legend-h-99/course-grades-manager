@@ -1626,6 +1626,15 @@ function AuthPanel({
               />
             </label>
             {message && <p className="auth-message">{message}</p>}
+            {mode === "register" && (
+              <p className="auth-privacy-note">
+                بالضغط على «إنشاء الحساب» توافق على{" "}
+                <a href="/privacy.html" target="_blank" rel="noopener noreferrer">
+                  سياسة الخصوصية
+                </a>{" "}
+                وتخزين بياناتك لأغراض إدارة المقررات.
+              </p>
+            )}
             <Button onClick={mode === "login" ? onEmailPasswordSignIn : onEmailPasswordSignUp}>
               {mode === "login" ? <LogIn size={18} /> : <UserPlus size={18} />}
               {mode === "login" ? "تسجيل الدخول" : "إنشاء الحساب"}

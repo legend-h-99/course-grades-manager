@@ -660,3 +660,4 @@ await cp("dist/index.html", "dist/public/index.html");
 await cp("dist/index.html", "dist/client/index.html");
 await cp("dist/assets", "dist/public/assets", { recursive: true });
 await cp("dist/assets", "dist/client/assets", { recursive: true });
+await cp("public/privacy.html", "dist/public/privacy.html");
