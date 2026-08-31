@@ -483,7 +483,13 @@ function App() {
     setImportMessage("");
 
     try {
-      const trainees = await importTraineesFromFile(fileParser, file, state.course);
+      const imported = await importTraineesFromFile(fileParser, file, state.course);
+      const trainees = imported.map((trainee) => {
+        if (manageSectionKind === "all" || !manageSectionNumber.trim()) return trainee;
+        return manageSectionKind === "theory"
+          ? { ...trainee, theorySection: manageSectionNumber.trim() }
+          : { ...trainee, practicalSection: manageSectionNumber.trim() };
+      });
       setState((current) => ({ ...current, trainees, grades: [] }));
       setActiveCardId(trainees[0]?.id ?? null);
       setImportMessage(`تم استيراد ${trainees.length} متدرب.`);

@@ -89,8 +89,9 @@ export function rowsToObjects(rows: unknown[][]) {
 // Keywords that reliably appear in the header row of a student data table.
 // Used to skip metadata sections (e.g. TVTC export format "Table 1" preamble).
 const DATA_HEADER_SIGNALS = [
-  "اسم الطالب", "اسم المتدرب", "الاسم", "name",
-  "الرقم التدريبي", "رقم المتدرب", "الرقم الجامعي", "trainingnumber",
+  "اسم الطالب", "اسم المتدرب", "الاسم", "اسم", "name",
+  "الرقم التدريبي", "رقم المتدرب", "الرقم الجامعي", "الرقم الأكاديمي",
+  "الرقمالأكاديمي", "رقم", "trainingnumber", "id",
 ];
 
 function norm(s: string) {
@@ -144,7 +145,7 @@ export function mapRowsToTrainees(rows: Record<string, unknown>[], course: Cours
   return rows
     .map((row, index) => {
       const trainingNumber =
-        pick(row, ["الرقم التدريبي", "رقم المتدرب", "الرقم الجامعي", "رقم", "trainingNumber", "id"]) ||
+        pick(row, ["الرقم التدريبي", "رقم المتدرب", "الرقم الجامعي", "الرقم الأكاديمي", "رقم", "trainingNumber", "id"]) ||
         String(index + 1);
       const name = pick(row, ["اسم المتدرب", "اسم الطالب", "الاسم", "اسم", "name"]);
       if (!name) return null;
