@@ -17,7 +17,10 @@ const securityHeaders = {
   "X-Frame-Options": "DENY",
   "Referrer-Policy": "strict-origin-when-cross-origin",
   "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
-  "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload"
+  "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+  "X-Data-Region": "ME-1",
+  "X-Content-Type-Options": "nosniff",
+  "X-Robots-Tag": "noindex, noarchive, nosnippet"
 };
 
 function json(data, status = 200) {
@@ -26,7 +29,8 @@ function json(data, status = 200) {
     headers: {
       "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "no-store",
-      "X-Content-Type-Options": "nosniff"
+      "X-Content-Type-Options": "nosniff",
+      "X-Data-Region": "ME-1"
     }
   });
 }
@@ -42,9 +46,52 @@ function withHeaders(response, headers) {
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers: nextHeaders });
 }
 
-async function readBody(request) {
+async function readBody(request, maxBytes = 2 * 1024 * 1024) {
   if (request.method === "GET" || request.method === "HEAD") return {};
+  const contentLength = parseInt(request.headers.get("content-length") ?? "0", 10);
+  if (contentLength > maxBytes) throw new Error("الطلب كبير جداً.");
   return request.json().catch(() => ({}));
+}
+
+function safeRedirectTo(redirectTo, origin) {
+  if (!redirectTo) return "";
+  try {
+    const url = new URL(redirectTo, origin);
+    if (url.origin !== new URL(origin).origin) return "";
+    return encodeURIComponent(url.toString());
+  } catch {
+    return "";
+  }
+}
+
+// ── In-memory rate limiter (per-isolate, resets on cold start) ────────────
+const authAttempts = new Map();
+
+function checkRateLimit(ip, endpoint, maxAttempts = 5, windowMs = 60_000) {
+  if (!ip) return;
+  const key = ip + ":" + endpoint;
+  const now = Date.now();
+  const entry = authAttempts.get(key);
+  if (!entry || now > entry.resetAt) {
+    authAttempts.set(key, { count: 1, resetAt: now + windowMs });
+    return;
+  }
+  entry.count += 1;
+  if (entry.count > maxAttempts) {
+    const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
+    const err = new Error("تجاوزت عدد المحاولات المسموح به. حاول مجدداً بعد دقيقة.");
+    err.status = 429;
+    err.retryAfter = retryAfter;
+    throw err;
+  }
+}
+
+function rateLimitedError(err) {
+  if (err.status !== 429) return null;
+  const res = json({ message: err.message }, 429);
+  const h = new Headers(res.headers);
+  h.set("Retry-After", String(err.retryAfter ?? 60));
+  return new Response(res.body, { status: 429, headers: h });
 }
 
 async function getEncryptionKey(env) {
@@ -152,6 +199,8 @@ function sessionPayload(data, profile) {
 async function handleAuth(request, env, pathname) {
   const body = await readBody(request);
   const url = new URL(request.url);
+  // Trust only Cloudflare's authenticated header; never accept client-supplied X-Forwarded-For.
+  const ip = request.headers.get("CF-Connecting-IP") ?? "";
 
   if (pathname === "/api/auth/me") {
     const token = bearer(request);
@@ -161,6 +210,10 @@ async function handleAuth(request, env, pathname) {
 
   if (pathname === "/api/auth/google") {
     if (!env.GOOGLE_CLIENT_ID) throw new Error("إعدادات Google غير مكتملة.");
+    // Pass the client-generated state through to Google so it comes back in the callback.
+    // The client validates state; the Worker validates code integrity.
+    const clientState = url.searchParams.get("state") ?? "";
+    if (!clientState) return error("معامل الحالة مفقود.");
     const redirectUri = new URL("/auth/callback", url.origin).toString();
     const googleUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
     googleUrl.searchParams.set("client_id", env.GOOGLE_CLIENT_ID);
@@ -169,6 +222,7 @@ async function handleAuth(request, env, pathname) {
     googleUrl.searchParams.set("scope", "openid email profile");
     googleUrl.searchParams.set("access_type", "offline");
     googleUrl.searchParams.set("prompt", "select_account");
+    googleUrl.searchParams.set("state", clientState);
     return Response.redirect(googleUrl.toString(), 302);
   }
 
@@ -176,7 +230,7 @@ async function handleAuth(request, env, pathname) {
     requireConfig(env);
     if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) throw new Error("إعدادات Google غير مكتملة.");
     const code = body.code;
-    if (!code) return error("رمز التفويض مفقود.");
+    if (!code || typeof code !== "string" || code.length > 512) return error("رمز التفويض غير صالح.");
     const redirectUri = new URL("/auth/callback", url.origin).toString();
     const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
@@ -184,7 +238,7 @@ async function handleAuth(request, env, pathname) {
       body: new URLSearchParams({ code, client_id: env.GOOGLE_CLIENT_ID, client_secret: env.GOOGLE_CLIENT_SECRET, redirect_uri: redirectUri, grant_type: "authorization_code" }).toString(),
     });
     const tokenData = await tokenResponse.json();
-    if (!tokenResponse.ok || !tokenData.id_token) throw new Error(tokenData.error_description || "فشل التحقق من Google.");
+    if (!tokenResponse.ok || !tokenData.id_token) throw new Error("فشل التحقق من Google.");
     const data = await supabase(env, "/auth/v1/token?grant_type=id_token", {
       method: "POST",
       body: { provider: "google", id_token: tokenData.id_token, access_token: tokenData.access_token },
@@ -193,6 +247,7 @@ async function handleAuth(request, env, pathname) {
   }
 
   if (pathname === "/api/auth/sign-in") {
+    checkRateLimit(ip, "sign-in");
     const data = await supabase(env, "/auth/v1/token?grant_type=password", {
       method: "POST",
       body: { email: body.email, password: body.password }
@@ -201,7 +256,9 @@ async function handleAuth(request, env, pathname) {
   }
 
   if (pathname === "/api/auth/sign-up") {
-    const redirect = body.redirectTo ? "?redirect_to=" + encodeURIComponent(body.redirectTo) : "";
+    checkRateLimit(ip, "sign-up", 3, 60_000);
+    const safeRedirect = safeRedirectTo(body.redirectTo, url.origin);
+    const redirect = safeRedirect ? "?redirect_to=" + safeRedirect : "";
     const data = await supabase(env, "/auth/v1/signup" + redirect, {
       method: "POST",
       body: { email: body.email, password: body.password, data: {}, gotrue_meta_security: {} }
@@ -211,7 +268,9 @@ async function handleAuth(request, env, pathname) {
   }
 
   if (pathname === "/api/auth/reset-password") {
-    const redirect = body.redirectTo ? "?redirect_to=" + encodeURIComponent(body.redirectTo) : "";
+    checkRateLimit(ip, "password-reset", 3, 60_000);
+    const safeRedirect = safeRedirectTo(body.redirectTo, url.origin);
+    const redirect = safeRedirect ? "?redirect_to=" + safeRedirect : "";
     await supabase(env, "/auth/v1/recover" + redirect, {
       method: "POST",
       body: { email: body.email, gotrue_meta_security: {} }
@@ -220,6 +279,7 @@ async function handleAuth(request, env, pathname) {
   }
 
   if (pathname === "/api/auth/send-otp") {
+    checkRateLimit(ip, "otp-send", 3, 60_000);
     await supabase(env, "/auth/v1/otp", {
       method: "POST",
       body: { email: body.email, create_user: true, gotrue_meta_security: {} }
@@ -228,6 +288,7 @@ async function handleAuth(request, env, pathname) {
   }
 
   if (pathname === "/api/auth/verify-otp") {
+    checkRateLimit(ip, "otp-verify", 10, 60_000);
     const data = await supabase(env, "/auth/v1/verify", {
       method: "POST",
       body: { email: body.email, token: body.token, type: "email" }
@@ -275,13 +336,14 @@ async function upsert(env, token, table, rows, conflict) {
 }
 
 async function saveProfile(env, token, userId, profile) {
+  const encKey = await getEncryptionKey(env);
   await upsert(env, token, "profiles", [{
     id: userId,
-    college_name: profile.collegeName ?? "",
-    department_name: profile.departmentName ?? "",
-    major_name: profile.majorName ?? "",
-    trainer_name: profile.trainerName ?? "",
-    employee_number: profile.employeeNumber ?? ""
+    college_name: await encryptField(encKey, profile.collegeName ?? ""),
+    department_name: await encryptField(encKey, profile.departmentName ?? ""),
+    major_name: await encryptField(encKey, profile.majorName ?? ""),
+    trainer_name: await encryptField(encKey, profile.trainerName ?? ""),
+    employee_number: await encryptField(encKey, profile.employeeNumber ?? "")
   }], "id");
 }
 
@@ -296,28 +358,35 @@ async function loadWorkspace(env, token, userId) {
     grades: []
   };
 
+  const encKey = await getEncryptionKey(env);
   const profile = first(await supabase(env, "/rest/v1/profiles?id=eq." + encodeURIComponent(userId) + "&select=*&limit=1", { token }));
   const account = profile
-    ? { collegeName: profile.college_name, departmentName: profile.department_name, majorName: profile.major_name }
+    ? {
+        collegeName: await decryptField(encKey, profile.college_name),
+        departmentName: await decryptField(encKey, profile.department_name),
+        majorName: await decryptField(encKey, profile.major_name)
+      }
     : starterState.account;
   const trainer = profile
-    ? { name: profile.trainer_name, employeeNumber: profile.employee_number }
+    ? {
+        name: await decryptField(encKey, profile.trainer_name),
+        employeeNumber: await decryptField(encKey, profile.employee_number)
+      }
     : starterState.trainer;
 
   const member = first(await supabase(env, "/rest/v1/course_trainers?user_id=eq." + encodeURIComponent(userId) + "&select=course_id,joined_at&order=joined_at.desc&limit=1", { token }));
   if (!member?.course_id) return { ...starterState, account, trainer };
 
-  const courseRow = first(await supabase(env, "/rest/v1/courses?id=eq." + encodeURIComponent(member.course_id) + "&select=*&limit=1", { token }));
+  const courseRow = first(await supabase(env, "/rest/v1/courses?id=eq." + encodeURIComponent(member.course_id) + "&select=id,name,kind,section_number,saved_at,updated_at,code&limit=1", { token }));
   if (!courseRow) return { ...starterState, account, trainer };
 
   const inviteRow = first(await supabase(env, "/rest/v1/course_invites?course_id=eq." + encodeURIComponent(courseRow.id) + "&select=token&limit=1", { token }));
   const [traineeRows, assessmentRows, trainerRows] = await Promise.all([
-    supabase(env, "/rest/v1/trainees?course_id=eq." + encodeURIComponent(courseRow.id) + "&select=*", { token }),
-    supabase(env, "/rest/v1/assessments?course_id=eq." + encodeURIComponent(courseRow.id) + "&select=*", { token }),
-    supabase(env, "/rest/v1/course_trainers?course_id=eq." + encodeURIComponent(courseRow.id) + "&select=*", { token })
+    supabase(env, "/rest/v1/trainees?course_id=eq." + encodeURIComponent(courseRow.id) + "&select=id,training_number,name,theory_section,practical_section&order=name.asc", { token }),
+    supabase(env, "/rest/v1/assessments?course_id=eq." + encodeURIComponent(courseRow.id) + "&select=id,name,kind,max_score,date,weight&order=date.asc", { token }),
+    supabase(env, "/rest/v1/course_trainers?course_id=eq." + encodeURIComponent(courseRow.id) + "&select=user_id,trainer_name,employee_number,joined_at", { token })
   ]);
 
-  const encKey = await getEncryptionKey(env);
   const trainees = await Promise.all((traineeRows ?? []).map(async (t) => ({
     id: t.id,
     trainingNumber: await decryptField(encKey, t.training_number),
@@ -341,14 +410,18 @@ async function loadWorkspace(env, token, userId) {
   }));
 
   const traineeIds = trainees.map((t) => t.id);
+  // Fetch only rows with an actual score (score IS NOT NULL and > 0 or non-empty).
+  // Empty/null scores are reconstructed client-side as ""; no need to transmit them.
   const gradeRows = traineeIds.length
-    ? await supabase(env, "/rest/v1/grades?trainee_id=in.(" + inList(traineeIds) + ")&select=*", { token })
+    ? await supabase(env, "/rest/v1/grades?trainee_id=in.(" + inList(traineeIds) + ")&select=trainee_id,assessment_id,score&score=not.is.null", { token })
     : [];
-  const grades = (gradeRows ?? []).map((g) => ({
-    traineeId: g.trainee_id,
-    assessmentId: g.assessment_id,
-    score: g.score ?? ""
-  }));
+  const grades = (gradeRows ?? [])
+    .filter((g) => g.score !== null && g.score !== "")
+    .map((g) => ({
+      traineeId: g.trainee_id,
+      assessmentId: g.assessment_id,
+      score: g.score,
+    }));
 
   return {
     account,
@@ -545,6 +618,8 @@ export default {
         checkOrigin(request, url);
         return await handleAuth(request, env, url.pathname);
       } catch (err) {
+        const limited = rateLimitedError(err);
+        if (limited) return limited;
         return error(err.message || "تعذّر تنفيذ الطلب.", err.message === "سجّل الدخول أولًا." ? 401 : 400);
       }
     }

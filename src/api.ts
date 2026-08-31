@@ -57,6 +57,24 @@ async function decryptSession(value: string): Promise<string | null> {
   }
 }
 
+// ── OAuth CSRF state ─────────────────────────────────────────────────────
+// A random nonce stored in memory (never persisted) for the OAuth round-trip.
+// Verified in completeOAuthCallback to prevent CSRF on login.
+let _oauthState: string | null = null;
+
+function generateOAuthState(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  _oauthState = btoa(String.fromCharCode(...bytes));
+  return _oauthState;
+}
+
+function consumeOAuthState(returned: string | null): boolean {
+  if (!returned || !_oauthState) return false;
+  const valid = returned === _oauthState;
+  _oauthState = null;
+  return valid;
+}
+
 // ── Session persistence ───────────────────────────────────────────────────
 
 async function readStoredSession(): Promise<StoredSession | null> {
@@ -158,14 +176,28 @@ async function normalizeSession(payload: ApiAuthResponse): Promise<ApiAuthRespon
 
 export const authApi = {
   async completeOAuthCallback() {
-    const errorDescription = new URLSearchParams(window.location.search).get("error_description");
-    if (errorDescription) {
+    const searchParams = new URLSearchParams(window.location.search);
+
+    // Map provider error codes to safe Arabic messages (never echo raw error_description)
+    const errorCode = searchParams.get("error");
+    if (errorCode) {
       window.history.replaceState(null, "", "/#/login");
-      throw new Error(decodeURIComponent(errorDescription));
+      const safeMessages: Record<string, string> = {
+        access_denied: "تم رفض الدخول. يرجى المحاولة مجدداً.",
+        server_error: "حدث خطأ في الخادم. يرجى المحاولة لاحقاً.",
+        temporarily_unavailable: "الخدمة غير متاحة مؤقتاً.",
+      };
+      throw new Error(safeMessages[errorCode] ?? "تعذّر إكمال تسجيل الدخول.");
+    }
+
+    // Validate CSRF state before exchanging the code
+    const returnedState = searchParams.get("state");
+    if (!consumeOAuthState(returnedState)) {
+      window.history.replaceState(null, "", "/#/login");
+      throw new Error("فشل التحقق من الجلسة. يرجى المحاولة مجدداً.");
     }
 
     // Code-based flow: Worker handles Google OAuth exchange
-    const searchParams = new URLSearchParams(window.location.search);
     const code = searchParams.get("code");
     if (code) {
       const payload = await request<ApiAuthResponse>("/api/auth/google/exchange", body({ code }), false);
@@ -197,8 +229,11 @@ export const authApi = {
   },
 
   signInWithGoogle() {
+    const state = generateOAuthState();
     const redirectTo = `${window.location.origin}/auth/callback`;
-    window.location.assign(`/api/auth/google?redirectTo=${encodeURIComponent(redirectTo)}`);
+    window.location.assign(
+      `/api/auth/google?redirectTo=${encodeURIComponent(redirectTo)}&state=${encodeURIComponent(state)}`,
+    );
   },
 
   async getSession() {

@@ -48,9 +48,22 @@ function withHeaders(response, headers) {
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers: nextHeaders });
 }
 
-async function readBody(request) {
+async function readBody(request, maxBytes = 2 * 1024 * 1024) {
   if (request.method === "GET" || request.method === "HEAD") return {};
+  const contentLength = parseInt(request.headers.get("content-length") ?? "0", 10);
+  if (contentLength > maxBytes) throw new Error("الطلب كبير جداً.");
   return request.json().catch(() => ({}));
+}
+
+function safeRedirectTo(redirectTo, origin) {
+  if (!redirectTo) return "";
+  try {
+    const url = new URL(redirectTo, origin);
+    if (url.origin !== new URL(origin).origin) return "";
+    return encodeURIComponent(url.toString());
+  } catch {
+    return "";
+  }
 }
 
 // ── In-memory rate limiter (per-isolate, resets on cold start) ────────────
@@ -188,7 +201,8 @@ function sessionPayload(data, profile) {
 async function handleAuth(request, env, pathname) {
   const body = await readBody(request);
   const url = new URL(request.url);
-  const ip = request.headers.get("CF-Connecting-IP") ?? request.headers.get("X-Forwarded-For") ?? "";
+  // Trust only Cloudflare's authenticated header; never accept client-supplied X-Forwarded-For.
+  const ip = request.headers.get("CF-Connecting-IP") ?? "";
 
   if (pathname === "/api/auth/me") {
     const token = bearer(request);
@@ -198,6 +212,10 @@ async function handleAuth(request, env, pathname) {
 
   if (pathname === "/api/auth/google") {
     if (!env.GOOGLE_CLIENT_ID) throw new Error("إعدادات Google غير مكتملة.");
+    // Pass the client-generated state through to Google so it comes back in the callback.
+    // The client validates state; the Worker validates code integrity.
+    const clientState = url.searchParams.get("state") ?? "";
+    if (!clientState) return error("معامل الحالة مفقود.");
     const redirectUri = new URL("/auth/callback", url.origin).toString();
     const googleUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
     googleUrl.searchParams.set("client_id", env.GOOGLE_CLIENT_ID);
@@ -206,6 +224,7 @@ async function handleAuth(request, env, pathname) {
     googleUrl.searchParams.set("scope", "openid email profile");
     googleUrl.searchParams.set("access_type", "offline");
     googleUrl.searchParams.set("prompt", "select_account");
+    googleUrl.searchParams.set("state", clientState);
     return Response.redirect(googleUrl.toString(), 302);
   }
 
@@ -213,7 +232,7 @@ async function handleAuth(request, env, pathname) {
     requireConfig(env);
     if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) throw new Error("إعدادات Google غير مكتملة.");
     const code = body.code;
-    if (!code) return error("رمز التفويض مفقود.");
+    if (!code || typeof code !== "string" || code.length > 512) return error("رمز التفويض غير صالح.");
     const redirectUri = new URL("/auth/callback", url.origin).toString();
     const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
@@ -221,7 +240,7 @@ async function handleAuth(request, env, pathname) {
       body: new URLSearchParams({ code, client_id: env.GOOGLE_CLIENT_ID, client_secret: env.GOOGLE_CLIENT_SECRET, redirect_uri: redirectUri, grant_type: "authorization_code" }).toString(),
     });
     const tokenData = await tokenResponse.json();
-    if (!tokenResponse.ok || !tokenData.id_token) throw new Error(tokenData.error_description || "فشل التحقق من Google.");
+    if (!tokenResponse.ok || !tokenData.id_token) throw new Error("فشل التحقق من Google.");
     const data = await supabase(env, "/auth/v1/token?grant_type=id_token", {
       method: "POST",
       body: { provider: "google", id_token: tokenData.id_token, access_token: tokenData.access_token },
@@ -239,7 +258,9 @@ async function handleAuth(request, env, pathname) {
   }
 
   if (pathname === "/api/auth/sign-up") {
-    const redirect = body.redirectTo ? "?redirect_to=" + encodeURIComponent(body.redirectTo) : "";
+    checkRateLimit(ip, "sign-up", 3, 60_000);
+    const safeRedirect = safeRedirectTo(body.redirectTo, url.origin);
+    const redirect = safeRedirect ? "?redirect_to=" + safeRedirect : "";
     const data = await supabase(env, "/auth/v1/signup" + redirect, {
       method: "POST",
       body: { email: body.email, password: body.password, data: {}, gotrue_meta_security: {} }
@@ -249,7 +270,9 @@ async function handleAuth(request, env, pathname) {
   }
 
   if (pathname === "/api/auth/reset-password") {
-    const redirect = body.redirectTo ? "?redirect_to=" + encodeURIComponent(body.redirectTo) : "";
+    checkRateLimit(ip, "password-reset", 3, 60_000);
+    const safeRedirect = safeRedirectTo(body.redirectTo, url.origin);
+    const redirect = safeRedirect ? "?redirect_to=" + safeRedirect : "";
     await supabase(env, "/auth/v1/recover" + redirect, {
       method: "POST",
       body: { email: body.email, gotrue_meta_security: {} }
