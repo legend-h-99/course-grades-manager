@@ -6,6 +6,14 @@
 
 import type { AuthPort, AuthResult } from "../ports";
 
+/** Minimum 8 chars + at least one digit or special character. */
+function validatePassword(password: string) {
+  if (password.length < 8) throw new Error("كلمة المرور يجب أن تكون 8 أحرف على الأقل.");
+  if (!/[\d!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password)) {
+    throw new Error("كلمة المرور يجب أن تحتوي على رقم أو رمز خاص على الأقل (مثل: 1، @، #، !).");
+  }
+}
+
 export async function signInWithPassword(
   port: AuthPort,
   email: string,
@@ -22,9 +30,8 @@ export async function signUp(
   password: string,
   redirectTo: string,
 ): Promise<AuthResult> {
-  if (!email.trim() || password.length < 6) {
-    throw new Error("أدخل بريدًا صحيحًا وكلمة مرور من 6 أحرف على الأقل.");
-  }
+  if (!email.trim()) throw new Error("أدخل بريدًا إلكترونيًا صحيحًا.");
+  validatePassword(password);
   return port.signUp(email.trim().toLowerCase(), password, redirectTo);
 }
 
@@ -58,9 +65,7 @@ export async function updateRecoveredPassword(
   port: AuthPort,
   password: string,
 ): Promise<AuthResult> {
-  if (password.length < 6) {
-    throw new Error("أدخل كلمة مرور جديدة من 6 أحرف على الأقل.");
-  }
+  validatePassword(password);
   return port.updatePassword(password);
 }
 

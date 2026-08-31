@@ -49,6 +49,36 @@ async function readBody(request) {
   return request.json().catch(() => ({}));
 }
 
+// ── In-memory rate limiter (per-isolate, resets on cold start) ────────────
+const authAttempts = new Map();
+
+function checkRateLimit(ip, endpoint, maxAttempts = 5, windowMs = 60_000) {
+  if (!ip) return;
+  const key = ip + ":" + endpoint;
+  const now = Date.now();
+  const entry = authAttempts.get(key);
+  if (!entry || now > entry.resetAt) {
+    authAttempts.set(key, { count: 1, resetAt: now + windowMs });
+    return;
+  }
+  entry.count += 1;
+  if (entry.count > maxAttempts) {
+    const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
+    const err = new Error("تجاوزت عدد المحاولات المسموح به. حاول مجدداً بعد دقيقة.");
+    err.status = 429;
+    err.retryAfter = retryAfter;
+    throw err;
+  }
+}
+
+function rateLimitedError(err) {
+  if (err.status !== 429) return null;
+  const res = json({ message: err.message }, 429);
+  const h = new Headers(res.headers);
+  h.set("Retry-After", String(err.retryAfter ?? 60));
+  return new Response(res.body, { status: 429, headers: h });
+}
+
 async function getEncryptionKey(env) {
   if (!env.FIELD_ENCRYPTION_KEY) return null;
   try {
@@ -154,6 +184,7 @@ function sessionPayload(data, profile) {
 async function handleAuth(request, env, pathname) {
   const body = await readBody(request);
   const url = new URL(request.url);
+  const ip = request.headers.get("CF-Connecting-IP") ?? request.headers.get("X-Forwarded-For") ?? "";
 
   if (pathname === "/api/auth/me") {
     const token = bearer(request);
@@ -195,6 +226,7 @@ async function handleAuth(request, env, pathname) {
   }
 
   if (pathname === "/api/auth/sign-in") {
+    checkRateLimit(ip, "sign-in");
     const data = await supabase(env, "/auth/v1/token?grant_type=password", {
       method: "POST",
       body: { email: body.email, password: body.password }
@@ -222,6 +254,7 @@ async function handleAuth(request, env, pathname) {
   }
 
   if (pathname === "/api/auth/send-otp") {
+    checkRateLimit(ip, "otp-send", 3, 60_000);
     await supabase(env, "/auth/v1/otp", {
       method: "POST",
       body: { email: body.email, create_user: true, gotrue_meta_security: {} }
@@ -230,6 +263,7 @@ async function handleAuth(request, env, pathname) {
   }
 
   if (pathname === "/api/auth/verify-otp") {
+    checkRateLimit(ip, "otp-verify", 10, 60_000);
     const data = await supabase(env, "/auth/v1/verify", {
       method: "POST",
       body: { email: body.email, token: body.token, type: "email" }
@@ -277,13 +311,14 @@ async function upsert(env, token, table, rows, conflict) {
 }
 
 async function saveProfile(env, token, userId, profile) {
+  const encKey = await getEncryptionKey(env);
   await upsert(env, token, "profiles", [{
     id: userId,
-    college_name: profile.collegeName ?? "",
-    department_name: profile.departmentName ?? "",
-    major_name: profile.majorName ?? "",
-    trainer_name: profile.trainerName ?? "",
-    employee_number: profile.employeeNumber ?? ""
+    college_name: await encryptField(encKey, profile.collegeName ?? ""),
+    department_name: await encryptField(encKey, profile.departmentName ?? ""),
+    major_name: await encryptField(encKey, profile.majorName ?? ""),
+    trainer_name: await encryptField(encKey, profile.trainerName ?? ""),
+    employee_number: await encryptField(encKey, profile.employeeNumber ?? "")
   }], "id");
 }
 
@@ -298,12 +333,20 @@ async function loadWorkspace(env, token, userId) {
     grades: []
   };
 
+  const encKey = await getEncryptionKey(env);
   const profile = first(await supabase(env, "/rest/v1/profiles?id=eq." + encodeURIComponent(userId) + "&select=*&limit=1", { token }));
   const account = profile
-    ? { collegeName: profile.college_name, departmentName: profile.department_name, majorName: profile.major_name }
+    ? {
+        collegeName: await decryptField(encKey, profile.college_name),
+        departmentName: await decryptField(encKey, profile.department_name),
+        majorName: await decryptField(encKey, profile.major_name)
+      }
     : starterState.account;
   const trainer = profile
-    ? { name: profile.trainer_name, employeeNumber: profile.employee_number }
+    ? {
+        name: await decryptField(encKey, profile.trainer_name),
+        employeeNumber: await decryptField(encKey, profile.employee_number)
+      }
     : starterState.trainer;
 
   const member = first(await supabase(env, "/rest/v1/course_trainers?user_id=eq." + encodeURIComponent(userId) + "&select=course_id,joined_at&order=joined_at.desc&limit=1", { token }));
@@ -319,7 +362,6 @@ async function loadWorkspace(env, token, userId) {
     supabase(env, "/rest/v1/course_trainers?course_id=eq." + encodeURIComponent(courseRow.id) + "&select=*", { token })
   ]);
 
-  const encKey = await getEncryptionKey(env);
   const trainees = await Promise.all((traineeRows ?? []).map(async (t) => ({
     id: t.id,
     trainingNumber: await decryptField(encKey, t.training_number),
@@ -547,6 +589,8 @@ export default {
         checkOrigin(request, url);
         return await handleAuth(request, env, url.pathname);
       } catch (err) {
+        const limited = rateLimitedError(err);
+        if (limited) return limited;
         return error(err.message || "تعذّر تنفيذ الطلب.", err.message === "سجّل الدخول أولًا." ? 401 : 400);
       }
     }
