@@ -490,9 +490,19 @@ function App() {
           ? { ...trainee, theorySection: manageSectionNumber.trim() }
           : { ...trainee, practicalSection: manageSectionNumber.trim() };
       });
-      setState((current) => ({ ...current, trainees, grades: [] }));
+      const nextState = { ...state, trainees, grades: [] };
+      setState(nextState);
       setActiveCardId(trainees[0]?.id ?? null);
       setImportMessage(`تم استيراد ${trainees.length} متدرب.`);
+      if (currentUser && state.course.code) {
+        setIsBusy(true);
+        try {
+          const saveResult = await saveWorkspaceUC(workspaceRepo, withCourseTrainer(currentUser.id, nextState));
+          if (saveResult) setState((current) => ({ ...current, course: { ...current.course, ...saveResult } }));
+          setLastSavedAt(new Date().toISOString());
+        } catch { /* silent — user can save manually */ }
+        finally { setIsBusy(false); }
+      }
     } catch (err) {
       setImportMessage((err as Error).message || "تعذر قراءة الملف. استخدم ملف Excel بصيغة xlsx أو ملف CSV.");
     } finally {
