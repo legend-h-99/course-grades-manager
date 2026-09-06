@@ -47,8 +47,8 @@ function makeFile(name: string, sizeBytes = 1024): File {
 }
 
 const assessments: Assessment[] = [
-  { id: "a1", name: "اختبار نظري", kind: "theory", maxScore: 20, date: "2026-01-01", weight: 0 },
-  { id: "a2", name: "تقييم عملي",  kind: "practical", maxScore: 30, date: "2026-01-02", weight: 0 },
+  { id: "a1", name: "اختبار نظري", kind: "theory", category: "coursework", maxScore: 20, date: "2026-01-01", weight: 0 },
+  { id: "a2", name: "تقييم عملي",  kind: "practical", category: "coursework", maxScore: 30, date: "2026-01-02", weight: 0 },
 ];
 
 // ── importTraineesFromFile ───────────────────────────────────────────────────

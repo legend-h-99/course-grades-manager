@@ -33,6 +33,7 @@ export type Assessment = {
   id: string;
   name: string;
   kind: AssessmentKind;
+  category: "final" | "coursework"; // نهائي / أعمال سنة
   maxScore: number;
   date: string;
   weight: number; // 0 = unweighted (raw sum), >0 = contributes weight% to final score
@@ -73,6 +74,16 @@ export type AuthUser = {
   createdAt: string;
 };
 
-export type AppPage = "home" | "register" | "login" | "app";
+export type AppPage = "home" | "register" | "login" | "app" | "courses";
+
+export type CourseSummary = {
+  id: string;
+  name: string;
+  code: string;
+  kind: AssessmentKind;
+  sectionNumber: string;
+  savedAt: string;
+  updatedAt: string;
+};
 
 export type SessionUser = { id: string; fullName: string; email: string };

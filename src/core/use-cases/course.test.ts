@@ -16,8 +16,8 @@ import type { Assessment, Grade, Trainee } from "../../types";
 // ── Shared fixtures ───────────────────────────────────────────────────────────
 
 const baseAssessments: Assessment[] = [
-  { id: "a1", name: "اختبار نظري", kind: "theory", maxScore: 20, date: "2026-01-01", weight: 0 },
-  { id: "a2", name: "تقييم عملي", kind: "practical", maxScore: 30, date: "2026-01-02", weight: 0 },
+  { id: "a1", name: "اختبار نظري", kind: "theory", category: "coursework", maxScore: 20, date: "2026-01-01", weight: 0 },
+  { id: "a2", name: "تقييم عملي", kind: "practical", category: "coursework", maxScore: 30, date: "2026-01-02", weight: 0 },
 ];
 
 const baseGrades: Grade[] = [
@@ -57,7 +57,7 @@ describe("generateCourseCode", () => {
 describe("defaultAssessmentDraft", () => {
   it("returns a theory draft with the correct shape", () => {
     const draft = defaultAssessmentDraft("theory");
-    expect(draft).toMatchObject({ name: "", kind: "theory", maxScore: 10, weight: 0 });
+    expect(draft).toMatchObject({ name: "", kind: "theory", category: "coursework", maxScore: 10, weight: 0 });
   });
 
   it("returns a practical draft with kind = practical", () => {
@@ -79,6 +79,7 @@ describe("addAssessment", () => {
       addAssessment(baseAssessments, {
         name: "",
         kind: "theory",
+        category: "coursework",
         maxScore: 10,
         date: "2026-01-01",
         weight: 0,
@@ -91,6 +92,7 @@ describe("addAssessment", () => {
       addAssessment(baseAssessments, {
         name: "   ",
         kind: "theory",
+        category: "coursework",
         maxScore: 10,
         date: "2026-01-01",
         weight: 0,
@@ -103,6 +105,7 @@ describe("addAssessment", () => {
       addAssessment(baseAssessments, {
         name: "اختبار",
         kind: "theory",
+        category: "coursework",
         maxScore: 0,
         date: "2026-01-01",
         weight: 0,
@@ -115,6 +118,7 @@ describe("addAssessment", () => {
       addAssessment(baseAssessments, {
         name: "اختبار",
         kind: "theory",
+        category: "coursework",
         maxScore: -5,
         date: "2026-01-01",
         weight: 0,
@@ -126,6 +130,7 @@ describe("addAssessment", () => {
     const result = addAssessment(baseAssessments, {
       name: "اختبار ثالث",
       kind: "theory",
+      category: "coursework",
       maxScore: 15,
       date: "2026-02-01",
       weight: 0,
@@ -138,6 +143,7 @@ describe("addAssessment", () => {
     const result = addAssessment([], {
       name: "  اختبار  ",
       kind: "theory",
+      category: "coursework",
       maxScore: 10,
       date: "2026-01-01",
       weight: 0,
@@ -149,6 +155,7 @@ describe("addAssessment", () => {
     const result = addAssessment([], {
       name: "اختبار",
       kind: "theory",
+      category: "coursework",
       maxScore: 10,
       date: "2026-01-01",
       weight: 0,
@@ -163,6 +170,7 @@ describe("addAssessment", () => {
     addAssessment(baseAssessments, {
       name: "جديد",
       kind: "practical",
+      category: "coursework",
       maxScore: 20,
       date: "2026-03-01",
       weight: 0,

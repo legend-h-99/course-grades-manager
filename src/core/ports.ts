@@ -4,7 +4,7 @@
  * Infrastructure layers implement these; the core never knows how.
  */
 
-import type { AppState, AssessmentKind, CourseTrainer, Trainee } from "../types";
+import type { AppState, AssessmentKind, CourseSummary, CourseTrainer, Trainee } from "../types";
 
 // ── Workspace ──────────────────────────────────────────────────────────────
 
@@ -45,6 +45,10 @@ export interface WorkspacePort {
   joinCourse(code: string, trainerName: string, employeeNumber: string): Promise<void>;
   /** Leave the current course and reset the server-side workspace. */
   clear(): Promise<void>;
+  /** List all courses accessible by the authenticated user. */
+  listCourses(): Promise<CourseSummary[]>;
+  /** Load a specific course by ID. */
+  loadCourse(courseId: string): Promise<AppState>;
 }
 
 // ── Auth ───────────────────────────────────────────────────────────────────

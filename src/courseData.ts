@@ -11,8 +11,8 @@ export const starterState: AppState = {
   course: { name: "", kind: "theory", sectionNumber: "", savedAt: "", updatedAt: "", inviteCode: "", code: "" },
   trainees: [],
   assessments: [
-    { id: crypto.randomUUID(), name: "اختبار نظري 1", kind: "theory", maxScore: 20, date: today(), weight: 0 },
-    { id: crypto.randomUUID(), name: "تقييم عملي 1", kind: "practical", maxScore: 30, date: today(), weight: 0 }
+    { id: crypto.randomUUID(), name: "اختبار نظري 1", kind: "theory", category: "coursework" as const, maxScore: 20, date: today(), weight: 0 },
+    { id: crypto.randomUUID(), name: "تقييم عملي 1", kind: "practical", category: "coursework" as const, maxScore: 30, date: today(), weight: 0 }
   ],
   grades: []
 };

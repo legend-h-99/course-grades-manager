@@ -25,13 +25,13 @@ const theoryCourse: CourseSetup = {
 };
 
 const assessments: Assessment[] = [
-  { id: "a1", name: "اختبار نظري", kind: "theory", maxScore: 20, date: "2026-01-01", weight: 0 },
-  { id: "a2", name: "تقييم عملي", kind: "practical", maxScore: 30, date: "2026-01-02", weight: 0 },
+  { id: "a1", name: "اختبار نظري", kind: "theory", category: "coursework", maxScore: 20, date: "2026-01-01", weight: 0 },
+  { id: "a2", name: "تقييم عملي", kind: "practical", category: "coursework", maxScore: 30, date: "2026-01-02", weight: 0 },
 ];
 
 const weightedAssessments: Assessment[] = [
-  { id: "a1", name: "اختبار نظري", kind: "theory", maxScore: 20, date: "2026-01-01", weight: 40 },
-  { id: "a2", name: "تقييم عملي", kind: "practical", maxScore: 30, date: "2026-01-02", weight: 60 },
+  { id: "a1", name: "اختبار نظري", kind: "theory", category: "coursework", maxScore: 20, date: "2026-01-01", weight: 40 },
+  { id: "a2", name: "تقييم عملي", kind: "practical", category: "coursework", maxScore: 30, date: "2026-01-02", weight: 60 },
 ];
 
 const trainees: Trainee[] = [

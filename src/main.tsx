@@ -185,12 +185,17 @@ function App() {
         goTo("login");
       }
 
-      const { session, profileExists } = await authGateway.getSession();
-      if (session?.user) {
-        await auth.openAuthenticatedWorkspace(session.user, profileExists);
+      try {
+        const { session, profileExists } = await authGateway.getSession();
+        if (session?.user) {
+          await auth.openAuthenticatedWorkspace(session.user, profileExists);
+        }
+      } catch {
+        auth.setAuthMessage("تعذّر الاتصال بالخادم. أعد تحميل الصفحة للمحاولة مجدداً.");
+      } finally {
+        setIsLoading(false);
+        markInitialized();
       }
-      setIsLoading(false);
-      markInitialized();
     }
     init();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -644,6 +649,18 @@ function App() {
           )}
         </nav>
         <div className="top-actions">
+          {!currentUser && (
+            <>
+              <Button variant="outline" onClick={() => goTo("login")}>
+                <LogIn size={18} />
+                دخول
+              </Button>
+              <Button onClick={() => goTo("register")}>
+                <UserPlus size={18} />
+                إنشاء حساب
+              </Button>
+            </>
+          )}
           {currentUser && <span className="session-chip">مرحبًا، {currentUser.fullName}</span>}
           {currentUser && (
             <Button variant="outline" onClick={auth.logoutUser}>
@@ -1591,6 +1608,15 @@ function AuthPanel({
     }
   };
   const { kicker, title, desc } = copyMap[step];
+  const [submitted, setSubmitted] = useState(false);
+  const emailError = submitted && !email.trim();
+  const passwordError = submitted && !password.trim();
+
+  function handleSubmit() {
+    setSubmitted(true);
+    if (!email.trim() || !password.trim()) return;
+    mode === "login" ? onEmailPasswordSignIn() : onEmailPasswordSignUp();
+  }
 
   return (
     <section className="auth-panel" id="auth">
@@ -1603,10 +1629,10 @@ function AuthPanel({
         {step === "start" && (
           <>
             <div className="auth-tabs" role="tablist" aria-label="اختيار نوع المصادقة">
-              <button type="button" className={mode === "login" ? "active" : ""} onClick={() => onModeChange("login")}>
+              <button type="button" className={mode === "login" ? "active" : ""} onClick={() => { onModeChange("login"); setSubmitted(false); }}>
                 دخول
               </button>
-              <button type="button" className={mode === "register" ? "active" : ""} onClick={() => onModeChange("register")}>
+              <button type="button" className={mode === "register" ? "active" : ""} onClick={() => { onModeChange("register"); setSubmitted(false); }}>
                 إنشاء حساب
               </button>
             </div>
@@ -1622,24 +1648,24 @@ function AuthPanel({
                 value={email}
                 placeholder="name@example.com"
                 autoComplete="email"
-                onChange={(e) => onEmailChange(e.target.value)}
+                className={emailError ? "input-error" : ""}
+                onChange={(e) => { onEmailChange(e.target.value); if (submitted) setSubmitted(false); }}
                 onKeyDown={(e) => e.key === "Enter" && onSendOtp()}
               />
+              {emailError && <span className="field-error">البريد الإلكتروني مطلوب</span>}
             </label>
             <label>
               كلمة المرور
               <Input
                 type="password"
                 value={password}
-                placeholder="••••••••"
+                placeholder="8 أحرف على الأقل"
                 autoComplete={mode === "login" ? "current-password" : "new-password"}
-                onChange={(e) => onPasswordChange(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    mode === "login" ? onEmailPasswordSignIn() : onEmailPasswordSignUp();
-                  }
-                }}
+                className={passwordError ? "input-error" : ""}
+                onChange={(e) => { onPasswordChange(e.target.value); if (submitted) setSubmitted(false); }}
+                onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}
               />
+              {passwordError && <span className="field-error">كلمة المرور مطلوبة</span>}
             </label>
             {message && <p className="auth-message">{message}</p>}
             {mode === "register" && (
@@ -1651,7 +1677,7 @@ function AuthPanel({
                 وتخزين بياناتك لأغراض إدارة المقررات.
               </p>
             )}
-            <Button onClick={mode === "login" ? onEmailPasswordSignIn : onEmailPasswordSignUp}>
+            <Button onClick={handleSubmit}>
               {mode === "login" ? <LogIn size={18} /> : <UserPlus size={18} />}
               {mode === "login" ? "تسجيل الدخول" : "إنشاء الحساب"}
             </Button>
@@ -1661,7 +1687,7 @@ function AuthPanel({
                   نسيت كلمة المرور؟
                 </button>
                 <button type="button" className="auth-switch" onClick={onSendOtp}>
-                  الدخول برمز تحقق بدل كلمة المرور
+                  دخول برمز التحقق
                 </button>
               </div>
             )}

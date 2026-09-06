@@ -10,11 +10,9 @@
   "assets": {
     "binding": "ASSETS",
     "directory": "./dist/public",
-    "run_worker_first": ["/api/*", "/auth/*"]
+    "run_worker_first": true
   },
-  // Smart placement: Cloudflare automatically routes each request to the
-  // data centre nearest the Supabase origin (ME region), keeping compute
-  // and data transit within the Gulf corridor.
+  // Smart Placement optimizes latency; it does not guarantee data residency.
   "placement": {
     "mode": "smart"
   },

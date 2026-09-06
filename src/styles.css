@@ -990,6 +990,19 @@ textarea:focus-visible {
   font-weight: 800;
 }
 
+.input-error {
+  border-color: #dc2626 !important;
+  outline-color: rgba(220, 38, 38, 0.18) !important;
+}
+
+.field-error {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #dc2626;
+}
+
 .auth-switch {
   border: 0;
   background: transparent;

@@ -18,13 +18,13 @@ export function generateCourseCode(): string {
 
 /** Return a blank assessment draft initialised with the course's primary kind. */
 export function defaultAssessmentDraft(kind: AssessmentKind) {
-  return { name: "", kind, maxScore: 10, date: today(), weight: 0 };
+  return { name: "", kind, category: "coursework" as "final" | "coursework", maxScore: 10, date: today(), weight: 0 };
 }
 
 /** Append a validated assessment to the list; throws on invalid input. */
 export function addAssessment(
   assessments: Assessment[],
-  draft: { name: string; kind: AssessmentKind; maxScore: number; date: string; weight: number },
+  draft: { name: string; kind: AssessmentKind; category: "final" | "coursework"; maxScore: number; date: string; weight: number },
 ): Assessment[] {
   if (!draft.name.trim()) throw new Error("اسم الاختبار مطلوب.");
   if (draft.maxScore <= 0) throw new Error("الدرجة القصوى يجب أن تكون أكبر من الصفر.");
@@ -34,6 +34,7 @@ export function addAssessment(
       id: crypto.randomUUID(),
       name: draft.name.trim(),
       kind: draft.kind,
+      category: draft.category ?? "coursework",
       maxScore: draft.maxScore,
       date: draft.date,
       weight: draft.weight,

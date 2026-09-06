@@ -6,7 +6,7 @@
 
 import { apiGet, apiPost } from "../api";
 import type { CoursePreview, ProfilePayload, SaveResult, WorkspacePort } from "../core/ports";
-import type { AppState } from "../types";
+import type { AppState, CourseSummary } from "../types";
 
 export class WorkspaceRepository implements WorkspacePort {
   load(): Promise<AppState> {
@@ -31,5 +31,13 @@ export class WorkspaceRepository implements WorkspacePort {
 
   clear(): Promise<void> {
     return apiPost("/api/workspace/clear", {});
+  }
+
+  listCourses(): Promise<CourseSummary[]> {
+    return apiGet<CourseSummary[]>("/api/workspace/courses");
+  }
+
+  loadCourse(courseId: string): Promise<AppState> {
+    return apiGet<AppState>(`/api/workspace?courseId=${encodeURIComponent(courseId)}`);
   }
 }

@@ -1,3 +1,4 @@
+import { getSessionKey } from "./sessionKey";
 import type { SessionUser } from "./types";
 
 type StoredSession = {
@@ -21,17 +22,8 @@ type ApiAuthResponse = {
 
 const sessionKey = "sanad.session";
 
-// ── Ephemeral AES-GCM key ─────────────────────────────────────────────────
-// Generated fresh on every page load, never persisted. sessionStorage holds
-// only ciphertext; the plaintext token lives only in JS heap memory.
-const aesKeyPromise: Promise<CryptoKey> = crypto.subtle.generateKey(
-  { name: "AES-GCM", length: 256 },
-  false,          // not extractable
-  ["encrypt", "decrypt"],
-);
-
 async function encryptSession(plaintext: string): Promise<string> {
-  const key = await aesKeyPromise;
+  const key = await getSessionKey();
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const cipher = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv },
@@ -46,7 +38,7 @@ async function encryptSession(plaintext: string): Promise<string> {
 
 async function decryptSession(value: string): Promise<string | null> {
   try {
-    const key = await aesKeyPromise;
+    const key = await getSessionKey();
     const combined = Uint8Array.from(atob(value), (c) => c.charCodeAt(0));
     const iv = combined.slice(0, 12);
     const data = combined.slice(12);
@@ -89,7 +81,7 @@ async function readStoredSession(): Promise<StoredSession | null> {
       return null;
     }
     const session = JSON.parse(decrypted) as StoredSession;
-    if (session.expiresAt && Date.now() > session.expiresAt) {
+    if (!session.accessToken || !session.user?.id) {
       window.sessionStorage.removeItem(sessionKey);
       return null;
     }
@@ -101,12 +93,14 @@ async function readStoredSession(): Promise<StoredSession | null> {
 
 async function writeStoredSession(session: ApiAuthResponse["session"] | StoredSession): Promise<void> {
   if (!session) return;
+  const previous = await readStoredSession();
+  const sameToken = previous?.accessToken === session.accessToken;
   const expiresAt = "expiresIn" in session && session.expiresIn
     ? Date.now() + (session.expiresIn as number) * 1000
-    : (session as StoredSession).expiresAt;
+    : (session as StoredSession).expiresAt ?? (sameToken ? previous?.expiresAt : undefined);
   const payload: StoredSession = {
     accessToken: session.accessToken,
-    refreshToken: session.refreshToken,
+    refreshToken: session.refreshToken ?? (sameToken ? previous?.refreshToken : undefined),
     expiresAt,
     user: session.user,
   };
@@ -115,6 +109,7 @@ async function writeStoredSession(session: ApiAuthResponse["session"] | StoredSe
 }
 
 function clearStoredSession() {
+  sessionGeneration += 1;
   window.sessionStorage.removeItem(sessionKey);
 }
 
@@ -145,6 +140,34 @@ function oauthParamsFromLocation() {
   return null;
 }
 
+class ApiError extends Error {
+  constructor(message: string, readonly status: number) { super(message); }
+}
+
+let refreshing: Promise<StoredSession | null> | undefined;
+let sessionGeneration = 0;
+
+async function validSession(): Promise<StoredSession | null> {
+  const session = await readStoredSession();
+  if (!session?.expiresAt || session.expiresAt > Date.now() + 30_000) return session;
+  if (!session.refreshToken) { clearStoredSession(); return null; }
+  if (!refreshing) {
+    const generation = sessionGeneration;
+    refreshing = (async () => {
+      const response = await fetch("/api/auth/refresh", body({ refreshToken: session.refreshToken }));
+      const payload = await response.json() as ApiAuthResponse;
+      if (!response.ok || !payload.session) {
+        if (response.status === 400 || response.status === 401) clearStoredSession();
+        throw new ApiError(payload.message || "تعذّر تجديد الجلسة.", response.status);
+      }
+      if (generation !== sessionGeneration) return null;
+      await writeStoredSession(payload.session);
+      return readStoredSession();
+    })().finally(() => { refreshing = undefined; });
+  }
+  return refreshing;
+}
+
 // ── HTTP helper ───────────────────────────────────────────────────────────
 
 async function request<T>(path: string, options: RequestInit = {}, authenticated = true): Promise<T> {
@@ -152,7 +175,7 @@ async function request<T>(path: string, options: RequestInit = {}, authenticated
   if (!headers.has("Content-Type") && options.body) headers.set("Content-Type", "application/json");
 
   if (authenticated) {
-    const session = await readStoredSession();
+    const session = await validSession();
     if (!session?.accessToken) throw new Error("سجّل الدخول أولًا.");
     headers.set("Authorization", `Bearer ${session.accessToken}`);
   }
@@ -160,7 +183,7 @@ async function request<T>(path: string, options: RequestInit = {}, authenticated
   const response = await fetch(path, { ...options, headers });
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new Error(payload?.message || "تعذّر تنفيذ الطلب.");
+    throw new ApiError(payload?.message || "تعذّر تنفيذ الطلب.", response.status);
   }
   return payload as T;
 }
@@ -179,6 +202,10 @@ async function normalizeSession(payload: ApiAuthResponse): Promise<ApiAuthRespon
 export const authApi = {
   async completeOAuthCallback() {
     const searchParams = new URLSearchParams(window.location.search);
+    // Ordinary navigation is not an OAuth callback and must not consume state.
+    if (!searchParams.has("code") && !searchParams.has("error") && !oauthParamsFromLocation()) {
+      return { session: null, profileExists: false };
+    }
 
     // Map provider error codes to safe Arabic messages (never echo raw error_description)
     const errorCode = searchParams.get("error");
@@ -239,18 +266,21 @@ export const authApi = {
   },
 
   async getSession() {
-    const session = await readStoredSession();
-    if (!session?.accessToken) return { session: null, profileExists: false };
     try {
+      const session = await validSession();
+      if (!session?.accessToken) return { session: null, profileExists: false };
       const payload = await request<ApiAuthResponse>("/api/auth/me", { method: "GET" });
       const nextSession: StoredSession = payload.user
         ? { ...session, user: payload.user }
         : session;
       await writeStoredSession(nextSession);
       return { session: nextSession, profileExists: Boolean(payload.profileExists) };
-    } catch {
-      clearStoredSession();
-      return { session: null, profileExists: false };
+    } catch (error) {
+      if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+        clearStoredSession();
+        return { session: null, profileExists: false };
+      }
+      throw error;
     }
   },
 

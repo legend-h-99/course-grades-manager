@@ -17,10 +17,9 @@ const securityHeaders = {
     "form-action 'self'"
   ].join("; "),
   "X-Frame-Options": "DENY",
-  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Referrer-Policy": "no-referrer",
   "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
   "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
-  "X-Data-Region": "ME-1",
   "X-Content-Type-Options": "nosniff",
   "X-Robots-Tag": "noindex, noarchive, nosnippet"
 };
@@ -29,10 +28,11 @@ function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
+      ...securityHeaders,
       "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "no-store",
       "X-Content-Type-Options": "nosniff",
-      "X-Data-Region": "ME-1"
+      "Referrer-Policy": "no-referrer"
     }
   });
 }
@@ -48,11 +48,40 @@ function withHeaders(response, headers) {
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers: nextHeaders });
 }
 
+function requestError(message, status = 400) {
+  const err = new Error(message);
+  err.status = status;
+  return err;
+}
+
 async function readBody(request, maxBytes = 2 * 1024 * 1024) {
   if (request.method === "GET" || request.method === "HEAD") return {};
-  const contentLength = parseInt(request.headers.get("content-length") ?? "0", 10);
-  if (contentLength > maxBytes) throw new Error("الطلب كبير جداً.");
-  return request.json().catch(() => ({}));
+  if (!(request.headers.get("Content-Type") ?? "").toLowerCase().startsWith("application/json")) {
+    throw requestError("نوع الطلب غير مدعوم.", 415);
+  }
+  if (Number(request.headers.get("content-length")) > maxBytes) throw requestError("الطلب كبير جداً.", 413);
+  const reader = request.body?.getReader();
+  if (!reader) throw requestError("بيانات الطلب غير صالحة.");
+  const chunks = [];
+  let size = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maxBytes) {
+      await reader.cancel();
+      throw requestError("الطلب كبير جداً.", 413);
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  try {
+    const data = JSON.parse(new TextDecoder().decode(bytes));
+    if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error();
+    return data;
+  } catch { throw requestError("بيانات الطلب غير صالحة."); }
 }
 
 function safeRedirectTo(redirectTo, origin) {
@@ -97,12 +126,12 @@ function rateLimitedError(err) {
 }
 
 async function getEncryptionKey(env) {
-  if (!env.FIELD_ENCRYPTION_KEY) return null;
+  if (!env.FIELD_ENCRYPTION_KEY) throw requestError("خدمة حماية البيانات غير متاحة مؤقتاً.", 503);
   try {
     const keyData = Uint8Array.from(atob(env.FIELD_ENCRYPTION_KEY), (c) => c.charCodeAt(0));
-    return crypto.subtle.importKey("raw", keyData, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+    return await crypto.subtle.importKey("raw", keyData, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
   } catch {
-    return null;
+    throw requestError("خدمة حماية البيانات غير متاحة مؤقتاً.", 503);
   }
 }
 
@@ -162,7 +191,13 @@ async function supabase(env, path, { method = "GET", token, body, headers = {} }
   });
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new Error(payload?.msg || payload?.message || payload?.error_description || payload?.hint || "تعذّر تنفيذ الطلب.");
+    const safeMessage = response.status >= 500 ? "الخدمة غير متاحة مؤقتاً." :
+      response.status === 429 ? "تجاوزت عدد المحاولات المسموح به." :
+      (payload?.code === "weak_password" || payload?.error_code === "weak_password") ? "كلمة المرور ضعيفة أو مسرّبة. اختر كلمة مرور أقوى." :
+      path.startsWith("/auth/") ? "تعذّر التحقق من بيانات الدخول أو تنفيذ طلب الحساب." : "تعذّر تنفيذ الطلب. تحقق من صلاحياتك والبيانات المدخلة.";
+    const failure = new Error(safeMessage);
+    failure.status = response.status;
+    throw failure;
   }
   return payload;
 }
@@ -246,6 +281,17 @@ async function handleAuth(request, env, pathname) {
       body: { provider: "google", id_token: tokenData.id_token, access_token: tokenData.access_token },
     });
     return json(sessionPayload(data, await profileExists(env, data.access_token, data.user.id)));
+  }
+
+  if (pathname === "/api/auth/refresh") {
+    if (request.method !== "POST") return error("Method not allowed", 405);
+    if (typeof body.refreshToken !== "string" || !body.refreshToken || body.refreshToken.length > 4096) {
+      return error("رمز تجديد الجلسة غير صالح.");
+    }
+    const data = await supabase(env, "/auth/v1/token?grant_type=refresh_token", {
+      method: "POST", body: { refresh_token: body.refreshToken }
+    });
+    return json(sessionPayload(data, false));
   }
 
   if (pathname === "/api/auth/sign-in") {
@@ -566,8 +612,9 @@ async function handleWorkspace(request, env, pathname) {
   if (pathname === "/api/workspace/find-course") {
     const { token } = await requireUser(env, request);
     const data = await supabase(env, "/rest/v1/rpc/find_course_invite_by_code", { method: "POST", token, body: { p_code: body.code } }).catch(() => null);
-    if (!data?.code) return json(null);
-    return json({ id: "", code: data.code, name: "", kind: "theory", sectionNumber: "", savedAt: "", trainers: [] });
+    const invite = first(data);
+    if (!invite?.code) return json(null);
+    return json({ id: "", code: invite.code, name: "", kind: "theory", sectionNumber: "", savedAt: "", trainers: [] });
   }
 
   if (pathname === "/api/workspace/join-course") {
@@ -602,8 +649,9 @@ async function fetchAsset(env, request, path) {
 function checkOrigin(request, url) {
   if (request.method === "GET" || request.method === "HEAD") return;
   const origin = request.headers.get("Origin");
+  if (request.headers.get("Sec-Fetch-Site") === "cross-site") throw requestError("طلب غير مصرح به.", 403);
   if (!origin) return;
-  if (new URL(origin).origin !== url.origin) throw new Error("طلب غير مصرح به.");
+  if (origin !== url.origin) throw requestError("طلب غير مصرح به.", 403);
 }
 
 export default {
@@ -617,21 +665,24 @@ export default {
 
     if (url.pathname.startsWith("/api/auth/")) {
       try {
+        const readOnly = ["/api/auth/me", "/api/auth/google"].includes(url.pathname);
+        if (request.method !== (readOnly ? "GET" : "POST")) return error("Method not allowed", 405);
         checkOrigin(request, url);
         return await handleAuth(request, env, url.pathname);
       } catch (err) {
         const limited = rateLimitedError(err);
         if (limited) return limited;
-        return error(err.message || "تعذّر تنفيذ الطلب.", err.message === "سجّل الدخول أولًا." ? 401 : 400);
+        return error(err.status || err.message === "سجّل الدخول أولًا." ? err.message : "تعذّر تنفيذ الطلب.", err.message === "سجّل الدخول أولًا." ? 401 : (err.status || 400));
       }
     }
 
     if (url.pathname.startsWith("/api/workspace")) {
       try {
+        if (request.method !== (url.pathname === "/api/workspace" ? "GET" : "POST")) return error("Method not allowed", 405);
         checkOrigin(request, url);
         return await handleWorkspace(request, env, url.pathname);
       } catch (err) {
-        return error(err.message || "تعذّر تنفيذ الطلب.", err.message === "سجّل الدخول أولًا." ? 401 : 400);
+        return error(err.status || err.message === "سجّل الدخول أولًا." ? err.message : "تعذّر تنفيذ الطلب.", err.message === "سجّل الدخول أولًا." ? 401 : (err.status || 400));
       }
     }
 

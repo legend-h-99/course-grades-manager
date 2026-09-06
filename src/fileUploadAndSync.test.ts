@@ -72,6 +72,8 @@ function makeWorkspacePort(overrides: Partial<WorkspacePort> = {}): WorkspacePor
     findCourse: vi.fn().mockResolvedValue(null),
     joinCourse: vi.fn().mockResolvedValue(undefined),
     clear: vi.fn().mockResolvedValue(undefined),
+    listCourses: vi.fn().mockResolvedValue([]),
+    loadCourse: vi.fn().mockResolvedValue(blankState),
     ...overrides,
   };
 }

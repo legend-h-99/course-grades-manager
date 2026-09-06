@@ -13,7 +13,7 @@ const baseCourse = {
 };
 
 const baseAssessments = [
-  { id: "a1", name: 'اختبار "نهائي"', kind: "theory" as const, maxScore: 20, date: "2026-01-01", weight: 0 },
+  { id: "a1", name: 'اختبار "نهائي"', kind: "theory" as const, category: "coursework" as const, maxScore: 20, date: "2026-01-01", weight: 0 },
 ];
 
 function makeState(overrides: Partial<AppState["account"]> = {}): AppState {
@@ -87,7 +87,7 @@ describe("buildTraineeReportHtml — XSS escaping", () => {
     const state: AppState = {
       ...makeState(),
       assessments: [
-        { id: "a1", name: '<script>steal()</script>', kind: "theory", maxScore: 20, date: "2026-01-01", weight: 0 },
+        { id: "a1", name: '<script>steal()</script>', kind: "theory", category: "coursework", maxScore: 20, date: "2026-01-01", weight: 0 },
       ],
     };
     const trainee: Trainee = {
