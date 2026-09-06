@@ -431,7 +431,7 @@ async function loadWorkspace(env, token, userId) {
   const inviteRow = first(await supabase(env, "/rest/v1/course_invites?course_id=eq." + encodeURIComponent(courseRow.id) + "&select=token&limit=1", { token }));
   const [traineeRows, assessmentRows, trainerRows] = await Promise.all([
     supabase(env, "/rest/v1/trainees?course_id=eq." + encodeURIComponent(courseRow.id) + "&select=id,training_number,name,theory_section,practical_section&order=name.asc", { token }),
-    supabase(env, "/rest/v1/assessments?course_id=eq." + encodeURIComponent(courseRow.id) + "&select=id,name,kind,max_score,date,weight&order=date.asc", { token }),
+    supabase(env, "/rest/v1/assessments?course_id=eq." + encodeURIComponent(courseRow.id) + "&select=id,name,kind,category,max_score,date,weight&order=date.asc", { token }),
     supabase(env, "/rest/v1/course_trainers?course_id=eq." + encodeURIComponent(courseRow.id) + "&select=user_id,trainer_name,employee_number,joined_at", { token })
   ]);
 
@@ -446,6 +446,7 @@ async function loadWorkspace(env, token, userId) {
     id: a.id,
     name: a.name,
     kind: a.kind,
+    category: a.category ?? "coursework",
     maxScore: a.max_score,
     date: a.date,
     weight: a.weight ?? 0
@@ -569,6 +570,7 @@ async function saveWorkspace(env, token, userId, state) {
     course_id: courseId,
     name: a.name,
     kind: a.kind,
+    category: a.category ?? "coursework",
     max_score: a.maxScore,
     date: a.date,
     weight: a.weight ?? 0

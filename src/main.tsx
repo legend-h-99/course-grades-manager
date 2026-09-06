@@ -1313,6 +1313,15 @@ function App() {
               <option value="theory">نظري</option>
               <option value="practical">عملي</option>
             </select>
+            <select
+              value={assessmentDraft.category}
+              onChange={(event) =>
+                setAssessmentDraft((draft) => ({ ...draft, category: event.target.value as "final" | "coursework" }))
+              }
+            >
+              <option value="coursework">أعمال سنة</option>
+              <option value="final">نهائي</option>
+            </select>
             <Input
               type="number"
               min="1"
@@ -1350,9 +1359,9 @@ function App() {
           )}
           <div className="assessment-list">
             {state.assessments.map((assessment) => (
-              <span key={assessment.id} className={`pill ${assessment.kind}`}>
+              <span key={assessment.id} className={`pill ${assessment.kind} ${assessment.category ?? "coursework"}`}>
                 {assessment.name} / {assessment.maxScore}
-                {assessment.weight ? ` / ${assessment.weight}%` : ""} / {kindLabel(assessment.kind)}
+                {assessment.weight ? ` / ${assessment.weight}%` : ""} / {kindLabel(assessment.kind)} / {assessment.category === "final" ? "نهائي" : "أعمال سنة"}
               </span>
             ))}
           </div>

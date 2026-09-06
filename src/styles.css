@@ -1570,6 +1570,16 @@ textarea {
   color: #155e75;
 }
 
+.pill.final {
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.pill.coursework {
+  background: #f0fdf4;
+  color: #166534;
+}
+
 .search-box {
   width: min(420px, 100%);
   border: 1px solid #cfd8dc;
