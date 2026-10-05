@@ -2578,3 +2578,13 @@ button:disabled {
   gap: 10px;
   justify-content: flex-end;
 }
+
+/* Outline controls must keep readable text inside the dark storage panel. */
+.storage-panel [data-slot="button"][data-variant="outline"] {
+  color: #17202a;
+  background: #ffffff;
+}
+.storage-panel [data-slot="button"][data-variant="outline"]:hover {
+  color: #17202a;
+  background: #e8eef3;
+}

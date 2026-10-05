@@ -117,3 +117,34 @@ test('invalid grade payload is rejected before any database write', async () => 
     assert.equal(writes,0);
   } finally {globalThis.fetch=original;}
 });
+
+test('trainee order survives saves with randomized name encryption', async () => {
+  const original = globalThis.fetch;
+  let rows = [];
+  const course = {id:'course',created_by:'user',updated_at:'old',code:'COURSE'};
+  globalThis.fetch = async (url, options) => {
+    if(url.pathname === '/auth/v1/user') return Response.json({id:'user'});
+    if(url.pathname === '/rest/v1/courses') return Response.json([course]);
+    if(url.pathname === '/rest/v1/course_trainers') return Response.json([{course_id:'course'}]);
+    if(url.pathname === '/rest/v1/course_invites') return Response.json([{token:'INVITE'}]);
+    if(url.pathname === '/rest/v1/trainees') {
+      if(options.method === 'POST') { rows=JSON.parse(options.body); return Response.json([]); }
+      if(url.searchParams.get('select') === 'id') return Response.json(rows.map(r=>({id:r.id})));
+      assert.equal(url.searchParams.get('order'),'sort_order.asc,id.asc');
+      return Response.json([...rows].sort((a,b)=>a.sort_order-b.sort_order));
+    }
+    return Response.json([]);
+  };
+  const encryptedEnv={...env,FIELD_ENCRYPTION_KEY:Buffer.alloc(32).toString('base64')};
+  const state={account:{},trainer:{},course:{code:'COURSE',updatedAt:'old'},trainees:[{id:'b',name:'متدرب ثان',trainingNumber:'002'},{id:'a',name:'متدرب أول',trainingNumber:'001'}],assessments:[],grades:[]};
+  const headers={'Content-Type':'application/json',Authorization:'Bearer test'};
+  try {
+    for(let i=0;i<2;i++) {
+      assert.equal((await worker.fetch(new Request('https://sanadapp.pro/api/workspace/save',{method:'POST',headers,body:JSON.stringify({state})}),encryptedEnv)).status,200);
+      assert.deepEqual(rows.map(r=>r.sort_order),[0,1]);
+      const response=await worker.fetch(new Request('https://sanadapp.pro/api/workspace',{headers}),encryptedEnv);
+      assert.equal(response.status,200);
+      assert.deepEqual((await response.json()).trainees.map(t=>[t.id,t.name]),[['b','متدرب ثان'],['a','متدرب أول']]);
+    }
+  } finally {globalThis.fetch=original;}
+});

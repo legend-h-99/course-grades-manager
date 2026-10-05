@@ -1,3 +1,4 @@
+import { isValidEmail } from "./core/use-cases/auth";
 import React, { ChangeEvent, useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useAutoSave } from "./hooks/useAutoSave";
 import { useAuthState } from "./hooks/useAuthState";
@@ -385,13 +386,12 @@ function App() {
         trainees: state.trainees.map((trainee) => applyCourseSection(trainee, course))
       };
       const nextState = withCourseTrainer(currentUser.id, nextStateBase);
-      setState(nextState);
       const saveResult = await saveWorkspaceUC(workspaceRepo, nextState);
       if (saveResult) {
-        setState((current) => ({ ...current, course: { ...current.course, ...saveResult } }));
+        setState({ ...nextState, course: { ...nextState.course, ...saveResult } });
       }
       setLastSavedAt(new Date().toISOString());
-      toast(`تم إنشاء رمز المقرر: ${courseCode}`, "success");
+      toast(saveResult?.inviteCode ? `تم حفظ المقرر. رمز المشاركة: ${saveResult.inviteCode}` : "تم حفظ المقرر. رمز المشاركة غير متاح حاليًا.", "success");
     } catch (err) {
       toast((err as Error).message || "تعذّر حفظ الإعدادات.", "error");
     } finally {
@@ -449,7 +449,7 @@ function App() {
   async function joinCourseByCode() {
     if (!currentUser || !courseLookup || isBusy) return;
     const alreadyJoined =
-      (state.course.inviteCode || state.course.code) === courseLookup.code &&
+      (state.course.inviteCode) === courseLookup.code &&
       courseTrainers.some((trainer) => trainer.userId === currentUser.id);
     if (alreadyJoined) {
       setCourseLookupMessage("أنت مرتبط بهذا المقرر بالفعل.");
@@ -473,7 +473,7 @@ function App() {
   }
 
   async function copyCourseCode() {
-    const inviteCode = state.course.inviteCode || state.course.code;
+    const inviteCode = state.course.inviteCode;
     if (!inviteCode) return;
     await navigator.clipboard.writeText(inviteCode);
     toast("تم نسخ رمز المقرر.", "info");
@@ -970,10 +970,10 @@ function App() {
         <div className="code-card">
           <div>
             <p className="section-kicker">رمز المقرر</p>
-            <h2>{state.course.inviteCode || state.course.code || "سيتم توليده بعد إنشاء المقرر"}</h2>
+            <h2>{state.course.inviteCode || "سيتم توليده بعد إنشاء المقرر"}</h2>
             <span>الرمز فريد ويتكون من حروف وأرقام. شاركه مع المدرب الآخر للبحث والانضمام لنفس المقرر.</span>
           </div>
-          <Button variant="outline" onClick={copyCourseCode} disabled={!(state.course.inviteCode || state.course.code)}>
+          <Button variant="outline" onClick={copyCourseCode} disabled={!(state.course.inviteCode)}>
             <Copy size={18} />
             نسخ الرمز
           </Button>
@@ -1234,7 +1234,7 @@ function App() {
                 <span className="sheet-handle" aria-hidden="true" />
                 <div className="sheet-head">
                   <h2 id="trainee-sheet-title">إضافة متدربين</h2>
-                  <p>أدخل رقم التدريب والاسم، كل متدرب في سطر</p>
+                  <p>أدخل كل متدرب في سطر، مثل: 001001 أحمد محمد</p>
                 </div>
                 <textarea
                   className="sheet-textarea"
@@ -1483,6 +1483,7 @@ function App() {
         </div>
       </section>
 
+      {state.trainees.length > 0 && !classStats && <p className="helper-text">أضف تقييمًا لعرض إحصائيات النجاح وتوزيع الدرجات.</p>}
       {classStats && (
         <StatsPanel stats={classStats} maxTotal={maxPossibleTotal} weighted={weighted} />
       )}
@@ -1647,13 +1648,13 @@ function AuthPanel({
     }
   };
   const { kicker, title, desc } = copyMap[step];
-  const [submitted, setSubmitted] = useState(false);
-  const emailError = submitted && !email.trim();
-  const passwordError = submitted && !password.trim();
+  const [submitted, setSubmitted] = useState<false | "password" | "email">(false);
+  const emailError = submitted && !isValidEmail(email);
+  const passwordError = submitted === "password" && !password.trim();
 
   function handleSubmit() {
-    setSubmitted(true);
-    if (!email.trim() || !password.trim()) return;
+    setSubmitted("password");
+    if (!isValidEmail(email) || !password.trim()) return;
     mode === "login" ? onEmailPasswordSignIn() : onEmailPasswordSignUp();
   }
 
@@ -1691,7 +1692,7 @@ function AuthPanel({
                 onChange={(e) => { onEmailChange(e.target.value); if (submitted) setSubmitted(false); }}
                 onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}
               />
-              {emailError && <span className="field-error">البريد الإلكتروني مطلوب</span>}
+              {emailError && <span className="field-error">{email.trim() ? "أدخل بريدًا إلكترونيًا صحيحًا." : "البريد الإلكتروني مطلوب"}</span>}
             </label>
             <label>
               كلمة المرور
@@ -1722,10 +1723,10 @@ function AuthPanel({
             </Button>
             {mode === "login" && (
               <div className="auth-secondary-actions">
-                <button type="button" className="auth-switch" onClick={onResetPassword}>
+                <button type="button" className="auth-switch" onClick={() => { setSubmitted("email"); if (isValidEmail(email)) onResetPassword(); }}>
                   نسيت كلمة المرور؟
                 </button>
-                <button type="button" className="auth-switch" onClick={onSendOtp}>
+                <button type="button" className="auth-switch" onClick={() => { setSubmitted("email"); if (isValidEmail(email)) onSendOtp(); }}>
                   دخول برمز التحقق
                 </button>
               </div>
@@ -1969,7 +1970,7 @@ function StatsPanel({ stats, maxTotal, weighted }: { stats: ClassStats; maxTotal
         <div>
           <p className="section-kicker">إحصائيات</p>
           <h2>توزيع الدرجات وإحصائيات الصف</h2>
-          <span>{stats.passCount} ناجح ({stats.passRate}%) من أصل {stats.passCount + (stats.distribution.reduce((s, d) => s + d.count, 0) - stats.passCount)} متدرب — عتبة النجاح 60% من {maxTotal}</span>
+          <span>{stats.passCount} ناجح ({stats.passRate}%) من أصل {stats.distribution.reduce((s, d) => s + d.count, 0)} متدرب — عتبة النجاح 60% من {maxTotal}</span>
         </div>
       </div>
       <div className="stats-metrics">

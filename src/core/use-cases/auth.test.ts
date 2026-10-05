@@ -307,3 +307,16 @@ describe("signOut", () => {
     await expect(signOut(port)).rejects.toThrow("network error");
   });
 });
+
+
+describe("invalid email never reaches authentication services", () => {
+  it.each(["not-an-email", "name@", "a b@example.com"])("rejects %s across all email flows", async (email) => {
+    const port = makeAuthPort();
+    await expect(signInWithPassword(port, email, "Password1!")).rejects.toThrow("بريدًا إلكترونيًا صحيحًا");
+    await expect(signUp(port, email, "Password1!", "https://sanadapp.pro")).rejects.toThrow("بريدًا إلكترونيًا صحيحًا");
+    await expect(sendOtp(port, email)).rejects.toThrow("بريدًا إلكترونيًا صحيحًا");
+    await expect(verifyOtp(port, email, "123456")).rejects.toThrow("بريدًا إلكترونيًا صحيحًا");
+    await expect(resetPassword(port, email, "https://sanadapp.pro")).rejects.toThrow("بريدًا إلكترونيًا صحيحًا");
+    for (const method of [port.signInWithPassword, port.signUp, port.sendOtp, port.verifyOtp, port.resetPassword]) expect(method).not.toHaveBeenCalled();
+  });
+});

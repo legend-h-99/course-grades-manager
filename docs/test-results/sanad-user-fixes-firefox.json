@@ -1,0 +1,22 @@
+[
+  {
+    "name": "Malformed email blocks login, OTP and recovery without network requests",
+    "status": "PASS"
+  },
+  {
+    "name": "Manual number/name entry preserves numbers and has no premature success statistics",
+    "status": "PASS"
+  },
+  {
+    "name": "Course creation displays only server-issued invitation before and after reload",
+    "status": "PASS"
+  },
+  {
+    "name": "Restore button text has readable contrast on desktop and mobile",
+    "status": "PASS"
+  },
+  {
+    "name": "Logout after upstream failure clears session and private UI",
+    "status": "PASS"
+  }
+]

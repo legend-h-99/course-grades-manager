@@ -107,3 +107,8 @@ describe("courseData", () => {
     });
   });
 });
+
+
+it("does not claim any pass rate before assessments exist", () => {
+  expect(getClassStats(trainees, [], [])).toBeNull();
+});

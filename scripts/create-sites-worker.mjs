@@ -433,7 +433,7 @@ async function loadWorkspace(env, token, userId, requestedCourseId = "") {
 
   const inviteRow = first(await supabase(env, "/rest/v1/course_invites?course_id=eq." + encodeURIComponent(courseRow.id) + "&select=token&limit=1", { token }));
   const [traineeRows, assessmentRows, trainerRows] = await Promise.all([
-    supabase(env, "/rest/v1/trainees?course_id=eq." + encodeURIComponent(courseRow.id) + "&select=id,training_number,name,theory_section,practical_section&order=name.asc", { token }),
+    supabase(env, "/rest/v1/trainees?course_id=eq." + encodeURIComponent(courseRow.id) + "&select=id,training_number,name,theory_section,practical_section&order=sort_order.asc,id.asc", { token }),
     supabase(env, "/rest/v1/assessments?course_id=eq." + encodeURIComponent(courseRow.id) + "&select=id,name,kind,category,max_score,date,weight&order=date.asc", { token }),
     supabase(env, "/rest/v1/course_trainers?course_id=eq." + encodeURIComponent(courseRow.id) + "&select=user_id,trainer_name,employee_number,joined_at", { token })
   ]);
@@ -576,9 +576,10 @@ async function saveWorkspace(env, token, userId, state) {
     await supabase(env, "/rest/v1/trainees?id=in.(" + inList(traineesToDelete) + ")", { method: "DELETE", token });
   }
   const encKey = await getEncryptionKey(env);
-  await upsert(env, token, "trainees", await Promise.all(state.trainees.map(async (t) => ({
+  await upsert(env, token, "trainees", await Promise.all(state.trainees.map(async (t, index) => ({
     id: t.id,
     course_id: courseId,
+    sort_order: index,
     training_number: await encryptField(encKey, t.trainingNumber),
     name: await encryptField(encKey, t.name),
     theory_section: t.theorySection,

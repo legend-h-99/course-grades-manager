@@ -236,7 +236,7 @@ export type ClassStats = {
 };
 
 export function getClassStats(trainees: Trainee[], assessments: Assessment[], grades: Grade[]): ClassStats | null {
-  if (!trainees.length) return null;
+  if (!trainees.length || !assessments.length || getMaxPossibleTotal(assessments) <= 0) return null;
   const weighted = isWeightedMode(assessments);
   const grouped = groupGradesByTrainee(grades);
   const totals = trainees.map((t) =>
