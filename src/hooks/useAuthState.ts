@@ -64,16 +64,17 @@ export function useAuthState({
   }, [page]);
 
   async function openAuthenticatedWorkspace(user: SessionUser, profileExists?: boolean) {
-    setCurrentUser(user);
     const hasProfile = profileExists ?? (await authPort.getSession()).profileExists;
     if (!hasProfile) {
       setProfileDraft((d) => ({ ...d, fullName: user.fullName || "" }));
       setAuthStep("profile-setup");
       setAuthMessage("");
+      setCurrentUser(user);
       return;
     }
     const workspace = await loadWorkspaceUC(workspacePort);
     setState(workspace);
+    setCurrentUser(user);
     setLastSavedAt(workspace.course.savedAt);
     setAuthMessage("");
     goTo("app");
@@ -200,7 +201,12 @@ export function useAuthState({
   }
 
   async function logoutUser() {
-    await signOutUC(authPort);
+    let message = "";
+    try {
+      await signOutUC(authPort);
+    } catch {
+      message = "تم تسجيل الخروج على هذا الجهاز. تعذّر إنهاء الجلسة على الخادم.";
+    }
     setCurrentUser(null);
     setState(starterState);
     setLastSavedAt("");
@@ -209,7 +215,7 @@ export function useAuthState({
     setAuthPassword("");
     setAuthMode("login");
     setOtpCode("");
-    setAuthMessage("");
+    setAuthMessage(message);
     goTo("login");
   }
 

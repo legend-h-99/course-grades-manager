@@ -1659,7 +1659,7 @@ function AuthPanel({
                 autoComplete="email"
                 className={emailError ? "input-error" : ""}
                 onChange={(e) => { onEmailChange(e.target.value); if (submitted) setSubmitted(false); }}
-                onKeyDown={(e) => e.key === "Enter" && onSendOtp()}
+                onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}
               />
               {emailError && <span className="field-error">البريد الإلكتروني مطلوب</span>}
             </label>

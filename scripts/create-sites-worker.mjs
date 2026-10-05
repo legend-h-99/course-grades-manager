@@ -395,7 +395,7 @@ async function saveProfile(env, token, userId, profile) {
   }], "id");
 }
 
-async function loadWorkspace(env, token, userId) {
+async function loadWorkspace(env, token, userId, requestedCourseId = "") {
   const starterState = {
     account: { collegeName: "", departmentName: "", majorName: "" },
     trainer: { name: "", employeeNumber: "" },
@@ -422,7 +422,9 @@ async function loadWorkspace(env, token, userId) {
       }
     : starterState.trainer;
 
-  const member = first(await supabase(env, "/rest/v1/course_trainers?user_id=eq." + encodeURIComponent(userId) + "&select=course_id,joined_at&order=joined_at.desc&limit=1", { token }));
+  const courseFilter = requestedCourseId ? "&course_id=eq." + encodeURIComponent(requestedCourseId) : "";
+  const member = first(await supabase(env, "/rest/v1/course_trainers?user_id=eq." + encodeURIComponent(userId) + courseFilter + "&select=course_id,joined_at&order=joined_at.desc&limit=1", { token }));
+  if (requestedCourseId && !member?.course_id) throw requestError("المقرر غير متاح.", 404);
   if (!member?.course_id) return { ...starterState, account, trainer };
 
   const courseRow = first(await supabase(env, "/rest/v1/courses?id=eq." + encodeURIComponent(member.course_id) + "&select=id,name,kind,section_number,saved_at,updated_at,code&limit=1", { token }));
@@ -594,9 +596,20 @@ async function saveWorkspace(env, token, userId, state) {
 async function handleWorkspace(request, env, pathname) {
   const body = await readBody(request);
 
+  if (pathname === "/api/workspace/courses" && request.method === "GET") {
+    const { token } = await requireUser(env, request);
+    const rows = await supabase(env, "/rest/v1/courses?select=id,name,code,kind,section_number,saved_at,updated_at&order=updated_at.desc", { token });
+    return json((rows ?? []).map((course) => ({
+      id: course.id, name: course.name, code: course.code, kind: course.kind,
+      sectionNumber: course.section_number, savedAt: course.saved_at, updatedAt: course.updated_at
+    })));
+  }
+
   if (pathname === "/api/workspace" && request.method === "GET") {
     const { token, user } = await requireUser(env, request);
-    return json(await loadWorkspace(env, token, user.id));
+    const courseId = new URL(request.url).searchParams.get("courseId") ?? "";
+    if (courseId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(courseId)) return error("معرّف المقرر غير صالح.");
+    return json(await loadWorkspace(env, token, user.id, courseId));
   }
 
   if (pathname === "/api/workspace/profile") {
@@ -680,7 +693,8 @@ export default {
 
     if (url.pathname.startsWith("/api/workspace")) {
       try {
-        if (request.method !== (url.pathname === "/api/workspace" ? "GET" : "POST")) return error("Method not allowed", 405);
+        const readOnly = ["/api/workspace", "/api/workspace/courses"].includes(url.pathname);
+        if (request.method !== (readOnly ? "GET" : "POST")) return error("Method not allowed", 405);
         checkOrigin(request, url);
         return await handleWorkspace(request, env, url.pathname);
       } catch (err) {

@@ -315,7 +315,7 @@ export const authApi = {
 
   async signOut() {
     try {
-      await request<ApiAuthResponse>("/api/auth/sign-out", { method: "POST" });
+      await request<ApiAuthResponse>("/api/auth/sign-out", body({}));
     } finally {
       clearStoredSession();
     }

@@ -69,3 +69,37 @@ test('missing encryption configuration blocks data writes', async () => {
     assert.equal(writes,0);
   } finally { globalThis.fetch = original; }
 });
+
+test('course list accepts GET and maps database fields', async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url) => url.pathname === '/auth/v1/user'
+    ? Response.json({ id: 'user' })
+    : Response.json([{ id: 'course', name: 'Test', code: 'ABC', kind: 'theory', section_number: '101', saved_at: 'today', updated_at: 'today' }]);
+  try {
+    const result = await worker.fetch(new Request('https://sanadapp.pro/api/workspace/courses', { headers: { Authorization: 'Bearer test' } }), env);
+    assert.equal(result.status, 200);
+    assert.equal((await result.json())[0].sectionNumber, '101');
+    assert.equal((await worker.fetch(new Request('https://sanadapp.pro/api/workspace/courses'), env)).status, 401);
+  } finally { globalThis.fetch = original; }
+});
+test('requested course must belong to the current user', async () => {
+  const original = globalThis.fetch;
+  const courseId = '00000000-0000-4000-8000-000000000001';
+  let checkedMembership = false;
+  globalThis.fetch = async (url) => {
+    if (url.pathname === '/auth/v1/user') return Response.json({ id: 'user' });
+    if (url.pathname === '/rest/v1/course_trainers') {
+      assert.equal(url.searchParams.get('course_id'), 'eq.' + courseId);
+      assert.equal(url.searchParams.get('user_id'), 'eq.user');
+      checkedMembership = true;
+    }
+    return Response.json([]);
+  };
+  const encryptedEnv = { ...env, FIELD_ENCRYPTION_KEY: Buffer.alloc(32).toString('base64') };
+  try {
+    const headers = { Authorization: 'Bearer test' };
+    assert.equal((await worker.fetch(new Request('https://sanadapp.pro/api/workspace?courseId=invalid', {headers}), encryptedEnv)).status, 400);
+    assert.equal((await worker.fetch(new Request('https://sanadapp.pro/api/workspace?courseId=' + courseId, {headers}), encryptedEnv)).status, 404);
+    assert.equal(checkedMembership, true);
+  } finally { globalThis.fetch = original; }
+});

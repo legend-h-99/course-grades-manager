@@ -26,6 +26,29 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe("browser authentication regressions", () => {
+  it("sends JSON when signing out and clears the stored session", async () => {
+    fetchMock.mockResolvedValueOnce(response({ session }));
+    const { authApi } = await import("./api");
+    await authApi.signInWithPassword(user.email, "test-password");
+    fetchMock.mockImplementationOnce(async (path: string, options: RequestInit) => {
+      expect(path).toBe("/api/auth/sign-out");
+      expect(new Headers(options.headers).get("Content-Type")).toBe("application/json");
+      expect(options.body).toBe("{}");
+      return response({ message: "Signed out" });
+    });
+    await authApi.signOut();
+    expect(storage.has("sanad.session")).toBe(false);
+  });
+
+  it("clears local credentials even when the sign-out service fails", async () => {
+    fetchMock.mockResolvedValueOnce(response({ session }));
+    const { authApi } = await import("./api");
+    await authApi.signInWithPassword(user.email, "test-password");
+    fetchMock.mockResolvedValueOnce(response({ message: "Unavailable" }, 503));
+    await expect(authApi.signOut()).rejects.toThrow("Unavailable");
+    expect(storage.has("sanad.session")).toBe(false);
+  });
+
   it("opens login without a false OAuth error or consuming pending state", async () => {
     storage.set("sanad.oauth_state", "pending");
     const { authApi } = await import("./api");
