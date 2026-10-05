@@ -198,9 +198,25 @@ npm run preview
 ```bash
 SUPABASE_URL
 SUPABASE_ANON_KEY
+FIELD_ENCRYPTION_KEY
 ```
 
 لا تستخدم بادئة `VITE_` لهذه القيم، ولا تضعها داخل كود الواجهة. المتصفح يجب أن يتصل بنفس الدومين فقط عبر `/api`.
+
+مفتاح `FIELD_ENCRYPTION_KEY` هو مفتاح AES بطول 32 بايت ممثل بصيغة Base64. احتفظ بمفتاح الإنتاج الموجود؛ تغييره دون إعادة تشفير البيانات يعطل قراءة الحقول المشفرة. يرفض الخادم الحفظ عند غيابه.
+
+## النشر التلقائي عبر GitHub إلى Cloudflare
+
+يشغّل `.github/workflows/deploy.yml` الاختبارات وبناء الإنتاج وفحوص أمن API على طلبات الدمج. بعد الدفع إلى `main` أو التشغيل اليدوي، ينشر الواجهة وخادم API معًا إلى Cloudflare Worker المرتبط بالدومينين في `wrangler.jsonc`.
+
+أضف إلى أسرار GitHub Actions:
+
+- `CLOUDFLARE_API_TOKEN`: رمز مخصص للنشر بصلاحيات Workers Scripts Edit وWorkers Routes Edit وZone Read للدومين المستهدف.
+- `CLOUDFLARE_ACCOUNT_ID`: معرّف حساب Cloudflare الذي يملك Worker والدومين.
+
+تحقق من وجود أسرار Supabase والتشفير المذكورة أعلاه داخل Worker، وأسرار Google عند تفعيل الدخول بجوجل. لا ينشئ مسار النشر أسرار Worker أو يغيّر قاعدة البيانات. لا تحتاج أسرار `VITE_SUPABASE_*` القديمة في GitHub لهذا المسار.
+
+قبل تأكيد جاهزية الإنتاج، تحقق من ترحيلات `supabase/migrations`، وتسجيل الدخول، وحفظ مقرر واستدعائه، وانضمام مدرب ثانٍ، وتصدير الدرجات. نجاح بناء الواجهة وحده لا يتحقق من هذه العمليات.
 
 ## تسجيل الدخول بجوجل
 
@@ -219,6 +235,8 @@ https://www.sanadapp.pro
 
 Authorized redirect URIs:
 https://nhiylmayomuvdpvdlrjx.supabase.co/auth/v1/callback
+https://sanadapp.pro/auth/callback
+https://www.sanadapp.pro/auth/callback
 ```
 
 وفي Supabase Authentication URL Configuration أضف:
