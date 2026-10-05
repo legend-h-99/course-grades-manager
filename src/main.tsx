@@ -144,7 +144,7 @@ function App() {
   const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const [assessmentDraft, setAssessmentDraft] = useState(() => defaultAssessmentDraft("theory"));
 
-  const { markInitialized } = useAutoSave({
+  const { markInitialized, markSaved } = useAutoSave({
     state,
     currentUser,
     isBusy,
@@ -156,6 +156,7 @@ function App() {
       setLastSavedAt(new Date().toISOString());
       toast("تم الحفظ التلقائي.", "success");
     },
+    onError: (error) => toast(error.message || "تعذّر الحفظ التلقائي. احفظ البيانات يدويًا.", "error"),
   });
 
   const auth = useAuthState({
@@ -387,6 +388,7 @@ function App() {
       };
       const nextState = withCourseTrainer(currentUser.id, nextStateBase);
       const saveResult = await saveWorkspaceUC(workspaceRepo, nextState);
+      markSaved(nextState);
       if (saveResult) {
         setState({ ...nextState, course: { ...nextState.course, ...saveResult } });
       }
@@ -407,6 +409,7 @@ function App() {
       const nextState = withCourseTrainer(currentUser.id, state);
       setState(nextState);
       const saveResult = await saveWorkspaceUC(workspaceRepo, nextState);
+      markSaved(nextState);
       if (saveResult) {
         setState((current) => ({ ...current, course: { ...current.course, ...saveResult } }));
       }
@@ -424,6 +427,7 @@ function App() {
     setIsBusy(true);
     try {
       const workspace = await loadWorkspaceUC(workspaceRepo);
+      markSaved(workspace);
       setState(workspace);
       setLastSavedAt(workspace.course.savedAt);
       toast("تم استدعاء آخر نسخة محفوظة.", "success");
@@ -459,6 +463,7 @@ function App() {
     try {
       await joinCourseUC(workspaceRepo, courseLookup.code, state.trainer.name || currentUser.fullName, state.trainer.employeeNumber);
       const workspace = await loadWorkspaceUC(workspaceRepo);
+      markSaved(workspace);
       setState(workspace);
       setLastSavedAt(workspace.course.savedAt);
       setCourseLookupMessage("تم الانضمام للمقرر.");
@@ -517,6 +522,7 @@ function App() {
         setIsBusy(true);
         try {
           const saveResult = await saveWorkspaceUC(workspaceRepo, withCourseTrainer(currentUser.id, nextState));
+          markSaved(nextState);
           if (saveResult) setState((current) => ({ ...current, course: { ...current.course, ...saveResult } }));
           setLastSavedAt(new Date().toISOString());
           setImportMessage(`تم استيراد ${trainees.length} متدرب وحفظهم.`);

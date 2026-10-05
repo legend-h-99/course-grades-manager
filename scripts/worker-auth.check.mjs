@@ -148,3 +148,20 @@ test('trainee order survives saves with randomized name encryption', async () =>
     }
   } finally {globalThis.fetch=original;}
 });
+
+test('joining trainer details survive a blank account profile', async () => {
+  const original=globalThis.fetch;
+  globalThis.fetch=async url => {
+    if(url.pathname==='/auth/v1/user') return Response.json({id:'member'});
+    if(url.pathname==='/rest/v1/course_trainers') return Response.json(url.searchParams.get('select')==='course_id,joined_at'
+      ? [{course_id:'course'}]
+      : [{user_id:'member',trainer_name:'مدرب انضم حديثًا',employee_number:'JOIN-2'}]);
+    if(url.pathname==='/rest/v1/courses') return Response.json([{id:'course',code:'COURSE'}]);
+    return Response.json([]);
+  };
+  try {
+    const response=await worker.fetch(new Request('https://sanadapp.pro/api/workspace',{headers:{Authorization:'Bearer test'}}),{...env,FIELD_ENCRYPTION_KEY:Buffer.alloc(32).toString('base64')});
+    assert.equal(response.status,200);
+    assert.deepEqual((await response.json()).trainer,{name:'مدرب انضم حديثًا',employeeNumber:'JOIN-2'});
+  } finally {globalThis.fetch=original;}
+});
