@@ -1,0 +1,90 @@
+[
+  {
+    "name": "Homepage and privacy available",
+    "status": "PASS"
+  },
+  {
+    "name": "Anonymous access denied",
+    "status": "PASS"
+  },
+  {
+    "name": "Foreign origin rejected",
+    "status": "PASS"
+  },
+  {
+    "name": "GET cannot clear workspace",
+    "status": "PASS"
+  },
+  {
+    "name": "Malformed JSON rejected",
+    "status": "PASS"
+  },
+  {
+    "name": "Non JSON rejected",
+    "status": "PASS"
+  },
+  {
+    "name": "Google redirect includes correct callback and state",
+    "status": "PASS"
+  },
+  {
+    "name": "Password login test account 1",
+    "status": "PASS"
+  },
+  {
+    "name": "Password login test account 2",
+    "status": "PASS"
+  },
+  {
+    "name": "Save encrypted profile",
+    "status": "PASS"
+  },
+  {
+    "name": "Load and decrypt profile",
+    "status": "PASS"
+  },
+  {
+    "name": "Create course, trainee, assessment and grade",
+    "status": "PASS"
+  },
+  {
+    "name": "Other account cannot see the new course before joining",
+    "status": "PASS"
+  },
+  {
+    "name": "Find invitation without exposing course data",
+    "status": "PASS"
+  },
+  {
+    "name": "Join course and read shared grade",
+    "status": "PASS"
+  },
+  {
+    "name": "Member edits shared grade",
+    "status": "PASS"
+  },
+  {
+    "name": "Stale revision does not overwrite newer data",
+    "status": "PASS"
+  },
+  {
+    "name": "Course list API available",
+    "status": "PASS"
+  },
+  {
+    "name": "Refresh rotates credentials",
+    "status": "PASS"
+  },
+  {
+    "name": "Browser mobile navigation and layout",
+    "status": "PASS"
+  },
+  {
+    "name": "Browser desktop navigation and layout",
+    "status": "PASS"
+  },
+  {
+    "name": "Browser authenticated owner loads saved grades and exports Excel",
+    "status": "PASS"
+  }
+]

@@ -27,7 +27,8 @@ export function addAssessment(
   draft: { name: string; kind: AssessmentKind; category: "final" | "coursework"; maxScore: number; date: string; weight: number },
 ): Assessment[] {
   if (!draft.name.trim()) throw new Error("اسم الاختبار مطلوب.");
-  if (draft.maxScore <= 0) throw new Error("الدرجة القصوى يجب أن تكون أكبر من الصفر.");
+  if (!Number.isFinite(draft.maxScore) || draft.maxScore <= 0) throw new Error("الدرجة القصوى يجب أن تكون أكبر من الصفر.");
+  if (!Number.isFinite(draft.weight) || draft.weight < 0 || draft.weight > 100) throw new Error("وزن الاختبار يجب أن يكون بين 0 و100.");
   return [
     ...assessments,
     {

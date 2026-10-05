@@ -1,5 +1,6 @@
 import {
   getGradeValue,
+  groupGradesByTrainee,
   getTraineeTotals,
   getTraineeTotalsWeighted,
   isWeightedMode,
@@ -18,6 +19,9 @@ export async function readTraineeRows(file: File) {
   }
   if (file.name.toLowerCase().endsWith(".csv")) {
     return parseCsv(await file.text());
+  }
+  if (!file.name.toLowerCase().endsWith(".xlsx")) {
+    throw new Error("صيغة الملف غير مدعومة. استخدم CSV أو XLSX؛ احفظ ملفات XLS القديمة بصيغة XLSX أولًا.");
   }
 
   const { readSheet } = await import("read-excel-file/browser");
@@ -45,10 +49,12 @@ export async function exportGradesWorkbook({
     "مجموع النظري", "مجموع العملي", "المجموع الكامل",
     ...state.assessments.map((assessment) => assessment.name)
   ];
+  const grouped = groupGradesByTrainee(state.grades);
   const rows = trainees.map((trainee) => {
+    const grades = grouped.get(trainee.id) ?? [];
     const totals = isWeightedMode(state.assessments)
-      ? getTraineeTotalsWeighted(trainee.id, state.assessments, state.grades)
-      : getTraineeTotals(trainee.id, state.assessments, state.grades);
+      ? getTraineeTotalsWeighted(trainee.id, state.assessments, grades)
+      : getTraineeTotals(trainee.id, state.assessments, grades);
     return [
       state.account.collegeName, state.account.departmentName, state.account.majorName,
       state.trainer.name, state.trainer.employeeNumber,
@@ -56,7 +62,7 @@ export async function exportGradesWorkbook({
       state.course.name, state.course.code, kindLabel(state.course.kind), state.course.sectionNumber,
       trainee.trainingNumber, trainee.name, trainee.theorySection, trainee.practicalSection,
       totals.theory, totals.practical, totals.total,
-      ...state.assessments.map((assessment) => getGradeValue(trainee.id, assessment.id, state.grades) || 0)
+      ...state.assessments.map((assessment) => getGradeValue(trainee.id, assessment.id, grades) || 0)
     ];
   });
   const sheetData: SheetData = [

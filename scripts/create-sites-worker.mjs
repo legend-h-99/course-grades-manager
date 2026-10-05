@@ -8,6 +8,7 @@ const securityHeaders = {
   "Content-Security-Policy": [
     "default-src 'self'",
     "script-src 'self'",
+    "worker-src 'self' blob:",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data:",
@@ -395,7 +396,7 @@ async function saveProfile(env, token, userId, profile) {
   }], "id");
 }
 
-async function loadWorkspace(env, token, userId) {
+async function loadWorkspace(env, token, userId, requestedCourseId = "") {
   const starterState = {
     account: { collegeName: "", departmentName: "", majorName: "" },
     trainer: { name: "", employeeNumber: "" },
@@ -422,7 +423,9 @@ async function loadWorkspace(env, token, userId) {
       }
     : starterState.trainer;
 
-  const member = first(await supabase(env, "/rest/v1/course_trainers?user_id=eq." + encodeURIComponent(userId) + "&select=course_id,joined_at&order=joined_at.desc&limit=1", { token }));
+  const courseFilter = requestedCourseId ? "&course_id=eq." + encodeURIComponent(requestedCourseId) : "";
+  const member = first(await supabase(env, "/rest/v1/course_trainers?user_id=eq." + encodeURIComponent(userId) + courseFilter + "&select=course_id,joined_at&order=joined_at.desc&limit=1", { token }));
+  if (requestedCourseId && !member?.course_id) throw requestError("المقرر غير متاح.", 404);
   if (!member?.course_id) return { ...starterState, account, trainer };
 
   const courseRow = first(await supabase(env, "/rest/v1/courses?id=eq." + encodeURIComponent(member.course_id) + "&select=id,name,kind,section_number,saved_at,updated_at,code&limit=1", { token }));
@@ -430,7 +433,7 @@ async function loadWorkspace(env, token, userId) {
 
   const inviteRow = first(await supabase(env, "/rest/v1/course_invites?course_id=eq." + encodeURIComponent(courseRow.id) + "&select=token&limit=1", { token }));
   const [traineeRows, assessmentRows, trainerRows] = await Promise.all([
-    supabase(env, "/rest/v1/trainees?course_id=eq." + encodeURIComponent(courseRow.id) + "&select=id,training_number,name,theory_section,practical_section&order=name.asc", { token }),
+    supabase(env, "/rest/v1/trainees?course_id=eq." + encodeURIComponent(courseRow.id) + "&select=id,training_number,name,theory_section,practical_section&order=sort_order.asc,id.asc", { token }),
     supabase(env, "/rest/v1/assessments?course_id=eq." + encodeURIComponent(courseRow.id) + "&select=id,name,kind,category,max_score,date,weight&order=date.asc", { token }),
     supabase(env, "/rest/v1/course_trainers?course_id=eq." + encodeURIComponent(courseRow.id) + "&select=user_id,trainer_name,employee_number,joined_at", { token })
   ]);
@@ -491,7 +494,30 @@ async function loadWorkspace(env, token, userId) {
   };
 }
 
+function validateWorkspace(state) {
+  if (!state?.account || !state.trainer || !Array.isArray(state.trainees) || !Array.isArray(state.assessments) || !Array.isArray(state.grades)) {
+    throw requestError("بيانات مساحة العمل غير صالحة.");
+  }
+  const trainees = new Set(state.trainees.map((trainee) => trainee.id));
+  const assessments = new Map();
+  for (const assessment of state.assessments) {
+    if (!Number.isFinite(assessment.maxScore) || assessment.maxScore <= 0 ||
+        !Number.isFinite(assessment.weight ?? 0) || (assessment.weight ?? 0) < 0 || (assessment.weight ?? 0) > 100) {
+      throw requestError("الدرجة القصوى أو وزن الاختبار غير صالح.");
+    }
+    assessments.set(assessment.id, assessment);
+  }
+  for (const grade of state.grades) {
+    const assessment = assessments.get(grade.assessmentId);
+    if (!trainees.has(grade.traineeId) || !assessment ||
+        (grade.score !== "" && (!Number.isFinite(grade.score) || grade.score < 0 || grade.score > assessment.maxScore))) {
+      throw requestError("الدرجة غير صالحة أو لا تتبع متدربًا واختبارًا في المقرر.");
+    }
+  }
+}
+
 async function saveWorkspace(env, token, userId, state) {
+  validateWorkspace(state);
   await saveProfile(env, token, userId, {
     collegeName: state.account.collegeName,
     departmentName: state.account.departmentName,
@@ -533,7 +559,7 @@ async function saveWorkspace(env, token, userId, state) {
     });
     courseRow = { id: existingCourse.id, updated_at: updatedAt };
   }
-  if (!courseRow) throw new Error("تم تعديل المقرر من مدرب آخر. استدعِ آخر نسخة ثم أعد تطبيق تغييراتك.");
+  if (!courseRow) throw requestError("تم تعديل المقرر من مدرب آخر. استدعِ آخر نسخة ثم أعد تطبيق تغييراتك.", 409);
   const courseId = courseRow.id;
 
   await upsert(env, token, "course_trainers", [{
@@ -550,9 +576,10 @@ async function saveWorkspace(env, token, userId, state) {
     await supabase(env, "/rest/v1/trainees?id=in.(" + inList(traineesToDelete) + ")", { method: "DELETE", token });
   }
   const encKey = await getEncryptionKey(env);
-  await upsert(env, token, "trainees", await Promise.all(state.trainees.map(async (t) => ({
+  await upsert(env, token, "trainees", await Promise.all(state.trainees.map(async (t, index) => ({
     id: t.id,
     course_id: courseId,
+    sort_order: index,
     training_number: await encryptField(encKey, t.trainingNumber),
     name: await encryptField(encKey, t.name),
     theory_section: t.theorySection,
@@ -594,9 +621,20 @@ async function saveWorkspace(env, token, userId, state) {
 async function handleWorkspace(request, env, pathname) {
   const body = await readBody(request);
 
+  if (pathname === "/api/workspace/courses" && request.method === "GET") {
+    const { token } = await requireUser(env, request);
+    const rows = await supabase(env, "/rest/v1/courses?select=id,name,code,kind,section_number,saved_at,updated_at&order=updated_at.desc", { token });
+    return json((rows ?? []).map((course) => ({
+      id: course.id, name: course.name, code: course.code, kind: course.kind,
+      sectionNumber: course.section_number, savedAt: course.saved_at, updatedAt: course.updated_at
+    })));
+  }
+
   if (pathname === "/api/workspace" && request.method === "GET") {
     const { token, user } = await requireUser(env, request);
-    return json(await loadWorkspace(env, token, user.id));
+    const courseId = new URL(request.url).searchParams.get("courseId") ?? "";
+    if (courseId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(courseId)) return error("معرّف المقرر غير صالح.");
+    return json(await loadWorkspace(env, token, user.id, courseId));
   }
 
   if (pathname === "/api/workspace/profile") {
@@ -680,7 +718,8 @@ export default {
 
     if (url.pathname.startsWith("/api/workspace")) {
       try {
-        if (request.method !== (url.pathname === "/api/workspace" ? "GET" : "POST")) return error("Method not allowed", 405);
+        const readOnly = ["/api/workspace", "/api/workspace/courses"].includes(url.pathname);
+        if (request.method !== (readOnly ? "GET" : "POST")) return error("Method not allowed", 405);
         checkOrigin(request, url);
         return await handleWorkspace(request, env, url.pathname);
       } catch (err) {

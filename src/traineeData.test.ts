@@ -330,3 +330,9 @@ describe("performance with large datasets", () => {
     expect(elapsed).toBeLessThan(150);
   });
 });
+
+
+it("preserves leading zeros and Arabic digits in space-separated manual input", () => {
+  const result = addManualTrainees([], "001001 متدرب أول\n٠٠١٠٠٢ متدرب ثان", theoryCourse, "all", "");
+  expect(result.map(t => [t.trainingNumber, t.name])).toEqual([["001001", "متدرب أول"], ["٠٠١٠٠٢", "متدرب ثان"]]);
+});

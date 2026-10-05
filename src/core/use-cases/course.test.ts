@@ -285,3 +285,12 @@ describe("removeTrainee", () => {
     expect(grades).toHaveLength(baseGrades.length);
   });
 });
+
+describe('assessment numeric boundaries', () => {
+  it.each([NaN, Infinity, -Infinity])('rejects invalid maximum %s', (maxScore) => {
+    expect(() => addAssessment([], {name:'Test',kind:'theory',category:'coursework',maxScore,date:'2026-10-05',weight:0})).toThrow();
+  });
+  it.each([-1,101,NaN,Infinity])('rejects invalid weight %s', (weight) => {
+    expect(() => addAssessment([], {name:'Test',kind:'theory',category:'coursework',maxScore:20,date:'2026-10-05',weight})).toThrow();
+  });
+});

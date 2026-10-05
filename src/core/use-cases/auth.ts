@@ -6,6 +6,14 @@
 
 import type { AuthPort, AuthResult } from "../ports";
 
+export function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+
+function validateEmail(email: string) {
+  if (!isValidEmail(email)) throw new Error("أدخل بريدًا إلكترونيًا صحيحًا.");
+}
+
 /** Minimum 8 chars + at least one digit or special character. */
 function validatePassword(password: string) {
   if (password.length < 8) throw new Error("كلمة المرور يجب أن تكون 8 أحرف على الأقل.");
@@ -21,6 +29,7 @@ export async function signInWithPassword(
 ): Promise<AuthResult> {
   if (!email.trim()) throw new Error("البريد الإلكتروني مطلوب.");
   if (!password) throw new Error("كلمة المرور مطلوبة.");
+  validateEmail(email);
   return port.signInWithPassword(email.trim().toLowerCase(), password);
 }
 
@@ -31,12 +40,14 @@ export async function signUp(
   redirectTo: string,
 ): Promise<AuthResult> {
   if (!email.trim()) throw new Error("أدخل بريدًا إلكترونيًا صحيحًا.");
+  validateEmail(email);
   validatePassword(password);
   return port.signUp(email.trim().toLowerCase(), password, redirectTo);
 }
 
 export async function sendOtp(port: AuthPort, email: string): Promise<void> {
   if (!email.trim()) throw new Error("أدخل البريد الإلكتروني أولاً.");
+  validateEmail(email);
   return port.sendOtp(email.trim().toLowerCase());
 }
 
@@ -45,6 +56,7 @@ export async function verifyOtp(
   email: string,
   rawCode: string,
 ): Promise<AuthResult> {
+  validateEmail(email);
   const token = rawCode.trim();
   if (token.length < 6) throw new Error("أدخل رمز التحقق المكون من 6 أرقام.");
   return port.verifyOtp(email.trim().toLowerCase(), token);
@@ -58,6 +70,7 @@ export async function resetPassword(
   if (!email.trim()) {
     throw new Error("أدخل البريد الإلكتروني أولًا لإرسال رابط إعادة الضبط.");
   }
+  validateEmail(email);
   return port.resetPassword(email.trim().toLowerCase(), redirectTo);
 }
 

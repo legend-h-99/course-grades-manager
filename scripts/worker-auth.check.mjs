@@ -69,3 +69,82 @@ test('missing encryption configuration blocks data writes', async () => {
     assert.equal(writes,0);
   } finally { globalThis.fetch = original; }
 });
+
+test('course list accepts GET and maps database fields', async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url) => url.pathname === '/auth/v1/user'
+    ? Response.json({ id: 'user' })
+    : Response.json([{ id: 'course', name: 'Test', code: 'ABC', kind: 'theory', section_number: '101', saved_at: 'today', updated_at: 'today' }]);
+  try {
+    const result = await worker.fetch(new Request('https://sanadapp.pro/api/workspace/courses', { headers: { Authorization: 'Bearer test' } }), env);
+    assert.equal(result.status, 200);
+    assert.equal((await result.json())[0].sectionNumber, '101');
+    assert.equal((await worker.fetch(new Request('https://sanadapp.pro/api/workspace/courses'), env)).status, 401);
+  } finally { globalThis.fetch = original; }
+});
+test('requested course must belong to the current user', async () => {
+  const original = globalThis.fetch;
+  const courseId = '00000000-0000-4000-8000-000000000001';
+  let checkedMembership = false;
+  globalThis.fetch = async (url) => {
+    if (url.pathname === '/auth/v1/user') return Response.json({ id: 'user' });
+    if (url.pathname === '/rest/v1/course_trainers') {
+      assert.equal(url.searchParams.get('course_id'), 'eq.' + courseId);
+      assert.equal(url.searchParams.get('user_id'), 'eq.user');
+      checkedMembership = true;
+    }
+    return Response.json([]);
+  };
+  const encryptedEnv = { ...env, FIELD_ENCRYPTION_KEY: Buffer.alloc(32).toString('base64') };
+  try {
+    const headers = { Authorization: 'Bearer test' };
+    assert.equal((await worker.fetch(new Request('https://sanadapp.pro/api/workspace?courseId=invalid', {headers}), encryptedEnv)).status, 400);
+    assert.equal((await worker.fetch(new Request('https://sanadapp.pro/api/workspace?courseId=' + courseId, {headers}), encryptedEnv)).status, 404);
+    assert.equal(checkedMembership, true);
+  } finally { globalThis.fetch = original; }
+});
+
+test('invalid grade payload is rejected before any database write', async () => {
+  const original = globalThis.fetch;
+  let writes = 0;
+  globalThis.fetch = async (url, options) => { if(options.method !== 'GET') writes++; return Response.json({id:'user'}); };
+  const baseState = { account:{}, trainer:{}, course:{code:'TEST'}, trainees:[{id:'t'}], assessments:[{id:'a',maxScore:20,weight:0}], grades:[] };
+  try {
+    for (const grade of [{traineeId:'t',assessmentId:'a',score:21},{traineeId:'t',assessmentId:'a',score:-1},{traineeId:'other',assessmentId:'a',score:1}]) {
+      const r = await worker.fetch(new Request('https://sanadapp.pro/api/workspace/save',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer test'},body:JSON.stringify({state:{...baseState,grades:[grade]}})}),env);
+      assert.equal(r.status,400);
+    }
+    assert.equal(writes,0);
+  } finally {globalThis.fetch=original;}
+});
+
+test('trainee order survives saves with randomized name encryption', async () => {
+  const original = globalThis.fetch;
+  let rows = [];
+  const course = {id:'course',created_by:'user',updated_at:'old',code:'COURSE'};
+  globalThis.fetch = async (url, options) => {
+    if(url.pathname === '/auth/v1/user') return Response.json({id:'user'});
+    if(url.pathname === '/rest/v1/courses') return Response.json([course]);
+    if(url.pathname === '/rest/v1/course_trainers') return Response.json([{course_id:'course'}]);
+    if(url.pathname === '/rest/v1/course_invites') return Response.json([{token:'INVITE'}]);
+    if(url.pathname === '/rest/v1/trainees') {
+      if(options.method === 'POST') { rows=JSON.parse(options.body); return Response.json([]); }
+      if(url.searchParams.get('select') === 'id') return Response.json(rows.map(r=>({id:r.id})));
+      assert.equal(url.searchParams.get('order'),'sort_order.asc,id.asc');
+      return Response.json([...rows].sort((a,b)=>a.sort_order-b.sort_order));
+    }
+    return Response.json([]);
+  };
+  const encryptedEnv={...env,FIELD_ENCRYPTION_KEY:Buffer.alloc(32).toString('base64')};
+  const state={account:{},trainer:{},course:{code:'COURSE',updatedAt:'old'},trainees:[{id:'b',name:'متدرب ثان',trainingNumber:'002'},{id:'a',name:'متدرب أول',trainingNumber:'001'}],assessments:[],grades:[]};
+  const headers={'Content-Type':'application/json',Authorization:'Bearer test'};
+  try {
+    for(let i=0;i<2;i++) {
+      assert.equal((await worker.fetch(new Request('https://sanadapp.pro/api/workspace/save',{method:'POST',headers,body:JSON.stringify({state})}),encryptedEnv)).status,200);
+      assert.deepEqual(rows.map(r=>r.sort_order),[0,1]);
+      const response=await worker.fetch(new Request('https://sanadapp.pro/api/workspace',{headers}),encryptedEnv);
+      assert.equal(response.status,200);
+      assert.deepEqual((await response.json()).trainees.map(t=>[t.id,t.name]),[['b','متدرب ثان'],['a','متدرب أول']]);
+    }
+  } finally {globalThis.fetch=original;}
+});

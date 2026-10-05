@@ -1,0 +1,131 @@
+[
+  {
+    "name": "chrome guest layout 360",
+    "status": "PASS",
+    "detail": {
+      "browserVersion": "154.0.8037.93"
+    }
+  },
+  {
+    "name": "chrome guest layout 390",
+    "status": "PASS",
+    "detail": {
+      "browserVersion": "154.0.8037.93"
+    }
+  },
+  {
+    "name": "chrome guest layout 768",
+    "status": "PASS",
+    "detail": {
+      "browserVersion": "154.0.8037.93"
+    }
+  },
+  {
+    "name": "chrome guest layout 1440",
+    "status": "PASS",
+    "detail": {
+      "browserVersion": "154.0.8037.93"
+    }
+  },
+  {
+    "name": "chrome authenticated session reload and logout",
+    "status": "PASS"
+  },
+  {
+    "name": "Accessibility home",
+    "status": "PASS",
+    "detail": {
+      "rulesPassed": 19
+    }
+  },
+  {
+    "name": "Accessibility login",
+    "status": "PASS",
+    "detail": {
+      "rulesPassed": 22
+    }
+  },
+  {
+    "name": "Accessibility register",
+    "status": "PASS",
+    "detail": {
+      "rulesPassed": 25
+    }
+  },
+  {
+    "name": "Accessibility workspace",
+    "status": "PASS",
+    "detail": {
+      "rulesPassed": 25
+    }
+  },
+  {
+    "name": "firefox guest layout 360",
+    "status": "PASS",
+    "detail": {
+      "browserVersion": "153.0"
+    }
+  },
+  {
+    "name": "firefox guest layout 390",
+    "status": "PASS",
+    "detail": {
+      "browserVersion": "153.0"
+    }
+  },
+  {
+    "name": "firefox guest layout 768",
+    "status": "PASS",
+    "detail": {
+      "browserVersion": "153.0"
+    }
+  },
+  {
+    "name": "firefox guest layout 1440",
+    "status": "PASS",
+    "detail": {
+      "browserVersion": "153.0"
+    }
+  },
+  {
+    "name": "firefox authenticated session reload and logout",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit guest layout 360",
+    "status": "PASS",
+    "detail": {
+      "browserVersion": "26.5"
+    }
+  },
+  {
+    "name": "webkit guest layout 390",
+    "status": "PASS",
+    "detail": {
+      "browserVersion": "26.5"
+    }
+  },
+  {
+    "name": "webkit guest layout 768",
+    "status": "PASS",
+    "detail": {
+      "browserVersion": "26.5"
+    }
+  },
+  {
+    "name": "webkit guest layout 1440",
+    "status": "PASS",
+    "detail": {
+      "browserVersion": "26.5"
+    }
+  },
+  {
+    "name": "webkit authenticated session reload and logout",
+    "status": "PASS"
+  },
+  {
+    "name": "edge",
+    "status": "BLOCKED",
+    "detail": "Browser unavailable"
+  }
+]

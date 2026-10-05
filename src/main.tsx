@@ -1,3 +1,4 @@
+import { isValidEmail } from "./core/use-cases/auth";
 import React, { ChangeEvent, useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useAutoSave } from "./hooks/useAutoSave";
 import { useAuthState } from "./hooks/useAuthState";
@@ -29,6 +30,7 @@ import {
   applyCourseSection,
   getClassStats,
   getGradeValue,
+  groupGradesByTrainee,
   getMaxPossibleTotal,
   getTraineeTotals,
   getTraineeTotalsWeighted,
@@ -262,14 +264,15 @@ function App() {
   }, [filteredTrainees, query]);
 
   const weighted = useMemo(() => isWeightedMode(state.assessments), [state.assessments]);
+  const gradesByTrainee = useMemo(() => groupGradesByTrainee(state.grades), [state.grades]);
 
   const totals = useMemo(() => {
     return state.trainees.map((trainee) =>
       weighted
-        ? getTraineeTotalsWeighted(trainee.id, state.assessments, state.grades)
-        : getTraineeTotals(trainee.id, state.assessments, state.grades)
+        ? getTraineeTotalsWeighted(trainee.id, state.assessments, gradesByTrainee.get(trainee.id) ?? [])
+        : getTraineeTotals(trainee.id, state.assessments, gradesByTrainee.get(trainee.id) ?? [])
     );
-  }, [state.assessments, state.grades, state.trainees, weighted]);
+  }, [state.assessments, gradesByTrainee, state.trainees, weighted]);
 
   const classStats = useMemo(
     () => getClassStats(state.trainees, state.assessments, state.grades),
@@ -383,13 +386,12 @@ function App() {
         trainees: state.trainees.map((trainee) => applyCourseSection(trainee, course))
       };
       const nextState = withCourseTrainer(currentUser.id, nextStateBase);
-      setState(nextState);
       const saveResult = await saveWorkspaceUC(workspaceRepo, nextState);
       if (saveResult) {
-        setState((current) => ({ ...current, course: { ...current.course, ...saveResult } }));
+        setState({ ...nextState, course: { ...nextState.course, ...saveResult } });
       }
       setLastSavedAt(new Date().toISOString());
-      toast(`تم إنشاء رمز المقرر: ${courseCode}`, "success");
+      toast(saveResult?.inviteCode ? `تم حفظ المقرر. رمز المشاركة: ${saveResult.inviteCode}` : "تم حفظ المقرر. رمز المشاركة غير متاح حاليًا.", "success");
     } catch (err) {
       toast((err as Error).message || "تعذّر حفظ الإعدادات.", "error");
     } finally {
@@ -447,7 +449,7 @@ function App() {
   async function joinCourseByCode() {
     if (!currentUser || !courseLookup || isBusy) return;
     const alreadyJoined =
-      (state.course.inviteCode || state.course.code) === courseLookup.code &&
+      (state.course.inviteCode) === courseLookup.code &&
       courseTrainers.some((trainer) => trainer.userId === currentUser.id);
     if (alreadyJoined) {
       setCourseLookupMessage("أنت مرتبط بهذا المقرر بالفعل.");
@@ -471,7 +473,7 @@ function App() {
   }
 
   async function copyCourseCode() {
-    const inviteCode = state.course.inviteCode || state.course.code;
+    const inviteCode = state.course.inviteCode;
     if (!inviteCode) return;
     await navigator.clipboard.writeText(inviteCode);
     toast("تم نسخ رمز المقرر.", "info");
@@ -485,6 +487,18 @@ function App() {
       event.target.value = "";
       return;
     }
+    event.target.value = "";
+    if (state.trainees.length || state.grades.length) {
+      setConfirmDialog({
+        message: "سيستبدل الملف قائمة المتدربين الحالية ويمسح درجاتهم المسجلة. هل تريد المتابعة؟",
+        onConfirm: () => { setConfirmDialog(null); void importTraineeFile(file); },
+      });
+      return;
+    }
+    await importTraineeFile(file);
+  }
+
+  async function importTraineeFile(file: File) {
     setImportMessage("");
 
     try {
@@ -498,20 +512,22 @@ function App() {
       const nextState = { ...state, trainees, grades: [] };
       setState(nextState);
       setActiveCardId(trainees[0]?.id ?? null);
-      setImportMessage(`تم استيراد ${trainees.length} متدرب.`);
+      setImportMessage(`تم تحميل ${trainees.length} متدرب إلى الجدول.`);
       if (currentUser && state.course.code) {
         setIsBusy(true);
         try {
           const saveResult = await saveWorkspaceUC(workspaceRepo, withCourseTrainer(currentUser.id, nextState));
           if (saveResult) setState((current) => ({ ...current, course: { ...current.course, ...saveResult } }));
           setLastSavedAt(new Date().toISOString());
-        } catch { /* silent — user can save manually */ }
+          setImportMessage(`تم استيراد ${trainees.length} متدرب وحفظهم.`);
+        } catch {
+          setImportMessage("تم تحميل الملف إلى الجدول، لكن تعذّر حفظه. أعد المحاولة من زر حفظ البيانات.");
+          toast("تعذّر حفظ المتدربين المستوردين. البيانات لم تُحفظ على الخادم.", "error");
+        }
         finally { setIsBusy(false); }
       }
     } catch (err) {
       setImportMessage((err as Error).message || "تعذر قراءة الملف. استخدم ملف Excel بصيغة xlsx أو ملف CSV.");
-    } finally {
-      event.target.value = "";
     }
   }
 
@@ -954,10 +970,10 @@ function App() {
         <div className="code-card">
           <div>
             <p className="section-kicker">رمز المقرر</p>
-            <h2>{state.course.inviteCode || state.course.code || "سيتم توليده بعد إنشاء المقرر"}</h2>
+            <h2>{state.course.inviteCode || "سيتم توليده بعد إنشاء المقرر"}</h2>
             <span>الرمز فريد ويتكون من حروف وأرقام. شاركه مع المدرب الآخر للبحث والانضمام لنفس المقرر.</span>
           </div>
-          <Button variant="outline" onClick={copyCourseCode} disabled={!(state.course.inviteCode || state.course.code)}>
+          <Button variant="outline" onClick={copyCourseCode} disabled={!(state.course.inviteCode)}>
             <Copy size={18} />
             نسخ الرمز
           </Button>
@@ -1206,7 +1222,7 @@ function App() {
                 <label>
                   <FileUp size={18} />
                   استيراد ملف
-                  <input hidden type="file" accept=".xlsx,.xls,.csv" onChange={importTrainees} />
+                  <input className="sr-only" type="file" accept=".xlsx,.csv" onChange={importTrainees} />
                 </label>
               </Button>
               {importMessage && <p className="helper-text">{importMessage}</p>}
@@ -1218,7 +1234,7 @@ function App() {
                 <span className="sheet-handle" aria-hidden="true" />
                 <div className="sheet-head">
                   <h2 id="trainee-sheet-title">إضافة متدربين</h2>
-                  <p>أدخل رقم التدريب والاسم، كل متدرب في سطر</p>
+                  <p>أدخل كل متدرب في سطر، مثل: 001001 أحمد محمد</p>
                 </div>
                 <textarea
                   className="sheet-textarea"
@@ -1254,12 +1270,14 @@ function App() {
                     <td data-label="الرقم التدريبي">
                       <Input
                         value={trainee.trainingNumber}
+                        aria-label={`الرقم التدريبي للمتدرب ${trainee.name}`}
                         onChange={(event) => updateTrainee(trainee.id, "trainingNumber", event.target.value)}
                       />
                     </td>
                     <td data-label="اسم المتدرب">
                       <Input
                         value={trainee.name}
+                        aria-label={`اسم المتدرب ${trainee.trainingNumber}`}
                         onChange={(event) => updateTrainee(trainee.id, "name", event.target.value)}
                       />
                     </td>
@@ -1306,6 +1324,7 @@ function App() {
             />
             <select
               value={assessmentDraft.kind}
+              aria-label="نوع الاختبار"
               onChange={(event) =>
                 setAssessmentDraft((draft) => ({ ...draft, kind: event.target.value as AssessmentKind }))
               }
@@ -1315,6 +1334,7 @@ function App() {
             </select>
             <select
               value={assessmentDraft.category}
+              aria-label="فئة الاختبار"
               onChange={(event) =>
                 setAssessmentDraft((draft) => ({ ...draft, category: event.target.value as "final" | "coursework" }))
               }
@@ -1344,6 +1364,7 @@ function App() {
             />
             <Input
               type="date"
+              aria-label="تاريخ الاختبار"
               value={assessmentDraft.date}
               onChange={(event) => setAssessmentDraft((draft) => ({ ...draft, date: event.target.value }))}
             />
@@ -1403,9 +1424,10 @@ function App() {
               </thead>
               <tbody>
                 {filteredTrainees.map((trainee) => {
+                  const traineeGrades = gradesByTrainee.get(trainee.id) ?? [];
                   const t = weighted
-                    ? getTraineeTotalsWeighted(trainee.id, state.assessments, state.grades)
-                    : getTraineeTotals(trainee.id, state.assessments, state.grades);
+                    ? getTraineeTotalsWeighted(trainee.id, state.assessments, traineeGrades)
+                    : getTraineeTotals(trainee.id, state.assessments, traineeGrades);
                   return (
                     <tr
                       key={trainee.id}
@@ -1422,10 +1444,11 @@ function App() {
                         <td key={assessment.id} data-label={assessment.name}>
                           <Input
                             className="grade-input"
+                            aria-label={`درجة ${trainee.name} في ${assessment.name}`}
                             type="number"
                             min="0"
                             max={assessment.maxScore}
-                            value={getGradeValue(trainee.id, assessment.id, state.grades)}
+                            value={getGradeValue(trainee.id, assessment.id, traineeGrades)}
                             onChange={(event) =>
                               updateGrade(trainee.id, assessment.id, event.target.value)
                             }
@@ -1460,6 +1483,7 @@ function App() {
         </div>
       </section>
 
+      {state.trainees.length > 0 && !classStats && <p className="helper-text">أضف تقييمًا لعرض إحصائيات النجاح وتوزيع الدرجات.</p>}
       {classStats && (
         <StatsPanel stats={classStats} maxTotal={maxPossibleTotal} weighted={weighted} />
       )}
@@ -1494,10 +1518,17 @@ function App() {
 function ConfirmDialog({ message, onConfirm, onCancel }: { message: string; onConfirm: () => void; onCancel: () => void }) {
   return (
     <div className="confirm-overlay" onClick={onCancel} role="presentation">
-      <div className="confirm-dialog" onClick={(e) => e.stopPropagation()} role="alertdialog" aria-modal="true">
-        <p>{message}</p>
+      <div className="confirm-dialog" onClick={(e) => e.stopPropagation()} role="alertdialog" aria-modal="true" aria-label="تأكيد الإجراء" aria-describedby="confirm-message" onKeyDown={(event) => {
+        if (event.key === "Escape") onCancel();
+        if (event.key === "Tab") {
+          const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button"));
+          const next = event.shiftKey ? buttons[0] : buttons[buttons.length - 1];
+          if (document.activeElement === next) { event.preventDefault(); (event.shiftKey ? buttons[buttons.length - 1] : buttons[0])?.focus(); }
+        }
+      }}>
+        <p id="confirm-message">{message}</p>
         <div className="confirm-actions">
-          <Button variant="outline" onClick={onCancel}>إلغاء</Button>
+          <Button variant="outline" onClick={onCancel} autoFocus>إلغاء</Button>
           <Button onClick={onConfirm}>تأكيد</Button>
         </div>
       </div>
@@ -1617,13 +1648,13 @@ function AuthPanel({
     }
   };
   const { kicker, title, desc } = copyMap[step];
-  const [submitted, setSubmitted] = useState(false);
-  const emailError = submitted && !email.trim();
-  const passwordError = submitted && !password.trim();
+  const [submitted, setSubmitted] = useState<false | "password" | "email">(false);
+  const emailError = submitted && !isValidEmail(email);
+  const passwordError = submitted === "password" && !password.trim();
 
   function handleSubmit() {
-    setSubmitted(true);
-    if (!email.trim() || !password.trim()) return;
+    setSubmitted("password");
+    if (!isValidEmail(email) || !password.trim()) return;
     mode === "login" ? onEmailPasswordSignIn() : onEmailPasswordSignUp();
   }
 
@@ -1637,7 +1668,7 @@ function AuthPanel({
       <div className="auth-form">
         {step === "start" && (
           <>
-            <div className="auth-tabs" role="tablist" aria-label="اختيار نوع المصادقة">
+            <div className="auth-tabs" role="group" aria-label="اختيار نوع المصادقة">
               <button type="button" className={mode === "login" ? "active" : ""} onClick={() => { onModeChange("login"); setSubmitted(false); }}>
                 دخول
               </button>
@@ -1659,9 +1690,9 @@ function AuthPanel({
                 autoComplete="email"
                 className={emailError ? "input-error" : ""}
                 onChange={(e) => { onEmailChange(e.target.value); if (submitted) setSubmitted(false); }}
-                onKeyDown={(e) => e.key === "Enter" && onSendOtp()}
+                onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}
               />
-              {emailError && <span className="field-error">البريد الإلكتروني مطلوب</span>}
+              {emailError && <span className="field-error">{email.trim() ? "أدخل بريدًا إلكترونيًا صحيحًا." : "البريد الإلكتروني مطلوب"}</span>}
             </label>
             <label>
               كلمة المرور
@@ -1692,10 +1723,10 @@ function AuthPanel({
             </Button>
             {mode === "login" && (
               <div className="auth-secondary-actions">
-                <button type="button" className="auth-switch" onClick={onResetPassword}>
+                <button type="button" className="auth-switch" onClick={() => { setSubmitted("email"); if (isValidEmail(email)) onResetPassword(); }}>
                   نسيت كلمة المرور؟
                 </button>
-                <button type="button" className="auth-switch" onClick={onSendOtp}>
+                <button type="button" className="auth-switch" onClick={() => { setSubmitted("email"); if (isValidEmail(email)) onSendOtp(); }}>
                   دخول برمز التحقق
                 </button>
               </div>
@@ -1939,7 +1970,7 @@ function StatsPanel({ stats, maxTotal, weighted }: { stats: ClassStats; maxTotal
         <div>
           <p className="section-kicker">إحصائيات</p>
           <h2>توزيع الدرجات وإحصائيات الصف</h2>
-          <span>{stats.passCount} ناجح ({stats.passRate}%) من أصل {stats.passCount + (stats.distribution.reduce((s, d) => s + d.count, 0) - stats.passCount)} متدرب — عتبة النجاح 60% من {maxTotal}</span>
+          <span>{stats.passCount} ناجح ({stats.passRate}%) من أصل {stats.distribution.reduce((s, d) => s + d.count, 0)} متدرب — عتبة النجاح 60% من {maxTotal}</span>
         </div>
       </div>
       <div className="stats-metrics">

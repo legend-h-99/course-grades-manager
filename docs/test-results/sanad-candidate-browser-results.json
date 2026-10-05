@@ -1,0 +1,26 @@
+[
+  {
+    "name": "CSV import and immediate persistence",
+    "status": "PASS"
+  },
+  {
+    "name": "Excel import and immediate persistence",
+    "status": "PASS"
+  },
+  {
+    "name": "Search by training number",
+    "status": "PASS"
+  },
+  {
+    "name": "Practical final assessment saves and reloads",
+    "status": "PASS"
+  },
+  {
+    "name": "Grade entry clamps to assessment maximum",
+    "status": "PASS"
+  },
+  {
+    "name": "Logout clears session and private workspace UI",
+    "status": "PASS"
+  }
+]

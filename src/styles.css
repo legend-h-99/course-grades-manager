@@ -1079,7 +1079,7 @@ textarea:focus-visible {
   display: flex;
   align-items: center;
   gap: 10px;
-  color: #9aa6ac;
+  color: #607077;
   font-size: 12px;
   font-weight: 600;
 }
@@ -1316,7 +1316,7 @@ th {
 
 td small {
   display: block;
-  color: #6d7a80;
+  color: #526168;
   margin-top: 2px;
 }
 
@@ -2577,4 +2577,14 @@ button:disabled {
   display: flex;
   gap: 10px;
   justify-content: flex-end;
+}
+
+/* Outline controls must keep readable text inside the dark storage panel. */
+.storage-panel [data-slot="button"][data-variant="outline"] {
+  color: #17202a;
+  background: #ffffff;
+}
+.storage-panel [data-slot="button"][data-variant="outline"]:hover {
+  color: #17202a;
+  background: #e8eef3;
 }

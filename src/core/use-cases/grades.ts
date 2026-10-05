@@ -57,7 +57,7 @@ export async function importTraineesFromFile(
 
 /**
  * Parse free-form text (one trainee per line) and merge with the existing list.
- * Supports "number, name" and "name" line formats.
+ * Supports delimited or whitespace-separated number/name pairs, and name-only lines.
  * Applies section assignment if a section filter is active.
  */
 export function addManualTrainees(
@@ -75,6 +75,10 @@ export function addManualTrainees(
       const parts = line.split(/[,،\t]/).map((p) => p.trim()).filter(Boolean);
       if (parts.length >= 2) {
         return { "الرقم التدريبي": parts[0], "اسم المتدرب": parts.slice(1).join(" ") };
+      }
+      const numberedName = line.match(/^([0-9٠-٩۰-۹]+)\s+(.+)$/u);
+      if (numberedName) {
+        return { "الرقم التدريبي": numberedName[1], "اسم المتدرب": numberedName[2].trim() };
       }
       return {
         "الرقم التدريبي": String(existing.length + index + 1),

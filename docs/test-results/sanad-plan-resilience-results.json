@@ -1,0 +1,63 @@
+[
+  {
+    "name": "Dataset 30 trainees / 20 assessments: render, search, export and totals",
+    "status": "PASS",
+    "detail": {
+      "loadedMs": 1016,
+      "searchMs": 54,
+      "exportMs": 2039,
+      "database": "mocked; no Supabase load",
+      "samples": 1
+    }
+  },
+  {
+    "name": "Dataset 100 trainees / 20 assessments: render, search, export and totals",
+    "status": "PASS",
+    "detail": {
+      "loadedMs": 1090,
+      "searchMs": 57,
+      "exportMs": 2120,
+      "database": "mocked; no Supabase load",
+      "samples": 1
+    }
+  },
+  {
+    "name": "Dataset 500 trainees / 20 assessments: render, search, export and totals",
+    "status": "PASS",
+    "detail": {
+      "loadedMs": 1620,
+      "searchMs": 457,
+      "exportMs": 1711,
+      "database": "mocked; no Supabase load",
+      "samples": 1
+    }
+  },
+  {
+    "name": "Weighted grades export matches independent reference",
+    "status": "PASS"
+  },
+  {
+    "name": "Offline save reports failure and retry persists the current edit",
+    "status": "PASS"
+  },
+  {
+    "name": "Import cancellation preserves trainees and grades",
+    "status": "PASS"
+  },
+  {
+    "name": "Failed import save remains visibly unsaved",
+    "status": "PASS"
+  },
+  {
+    "name": "Oversized import is rejected without a write",
+    "status": "PASS"
+  },
+  {
+    "name": "Logout after upstream failure clears session and private UI",
+    "status": "PASS"
+  },
+  {
+    "name": "HTML payload is displayed as literal trainee text",
+    "status": "PASS"
+  }
+]

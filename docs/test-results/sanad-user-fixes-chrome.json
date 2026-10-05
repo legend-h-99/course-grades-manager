@@ -1,0 +1,83 @@
+[
+  {
+    "name": "Malformed email blocks login, OTP and recovery without network requests",
+    "status": "PASS"
+  },
+  {
+    "name": "Manual number/name entry preserves numbers and has no premature success statistics",
+    "status": "PASS"
+  },
+  {
+    "name": "Course creation displays only server-issued invitation before and after reload",
+    "status": "PASS"
+  },
+  {
+    "name": "Restore button text has readable contrast on desktop and mobile",
+    "status": "PASS"
+  },
+  {
+    "name": "Accessibility of repaired workspace on desktop and mobile",
+    "status": "PASS"
+  },
+  {
+    "name": "Dataset 30 trainees / 20 assessments: render, search, export and totals",
+    "status": "PASS",
+    "detail": {
+      "loadedMs": 1040,
+      "searchMs": 22,
+      "exportMs": 2075,
+      "database": "mocked; no Supabase load",
+      "samples": 1
+    }
+  },
+  {
+    "name": "Dataset 100 trainees / 20 assessments: render, search, export and totals",
+    "status": "PASS",
+    "detail": {
+      "loadedMs": 1099,
+      "searchMs": 58,
+      "exportMs": 2121,
+      "database": "mocked; no Supabase load",
+      "samples": 1
+    }
+  },
+  {
+    "name": "Dataset 500 trainees / 20 assessments: render, search, export and totals",
+    "status": "PASS",
+    "detail": {
+      "loadedMs": 1675,
+      "searchMs": 883,
+      "exportMs": 350,
+      "database": "mocked; no Supabase load",
+      "samples": 1
+    }
+  },
+  {
+    "name": "Weighted grades export matches independent reference",
+    "status": "PASS"
+  },
+  {
+    "name": "Offline save reports failure and retry persists the current edit",
+    "status": "PASS"
+  },
+  {
+    "name": "Import cancellation preserves trainees and grades",
+    "status": "PASS"
+  },
+  {
+    "name": "Failed import save remains visibly unsaved",
+    "status": "PASS"
+  },
+  {
+    "name": "Oversized import is rejected without a write",
+    "status": "PASS"
+  },
+  {
+    "name": "Logout after upstream failure clears session and private UI",
+    "status": "PASS"
+  },
+  {
+    "name": "HTML payload is displayed as literal trainee text",
+    "status": "PASS"
+  }
+]
