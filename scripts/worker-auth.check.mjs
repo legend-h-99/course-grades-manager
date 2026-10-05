@@ -103,3 +103,17 @@ test('requested course must belong to the current user', async () => {
     assert.equal(checkedMembership, true);
   } finally { globalThis.fetch = original; }
 });
+
+test('invalid grade payload is rejected before any database write', async () => {
+  const original = globalThis.fetch;
+  let writes = 0;
+  globalThis.fetch = async (url, options) => { if(options.method !== 'GET') writes++; return Response.json({id:'user'}); };
+  const baseState = { account:{}, trainer:{}, course:{code:'TEST'}, trainees:[{id:'t'}], assessments:[{id:'a',maxScore:20,weight:0}], grades:[] };
+  try {
+    for (const grade of [{traineeId:'t',assessmentId:'a',score:21},{traineeId:'t',assessmentId:'a',score:-1},{traineeId:'other',assessmentId:'a',score:1}]) {
+      const r = await worker.fetch(new Request('https://sanadapp.pro/api/workspace/save',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer test'},body:JSON.stringify({state:{...baseState,grades:[grade]}})}),env);
+      assert.equal(r.status,400);
+    }
+    assert.equal(writes,0);
+  } finally {globalThis.fetch=original;}
+});

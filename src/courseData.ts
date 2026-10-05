@@ -171,6 +171,16 @@ export function applyCourseSection(trainee: Trainee, course: CourseSetup) {
   return { ...trainee, practicalSection: trainee.practicalSection || course.sectionNumber };
 }
 
+export function groupGradesByTrainee(grades: Grade[]) {
+  const grouped = new Map<string, Grade[]>();
+  for (const grade of grades) {
+    const items = grouped.get(grade.traineeId);
+    if (items) items.push(grade);
+    else grouped.set(grade.traineeId, [grade]);
+  }
+  return grouped;
+}
+
 export function getGradeValue(traineeId: string, assessmentId: string, grades: Grade[]) {
   return grades.find((grade) => grade.traineeId === traineeId && grade.assessmentId === assessmentId)?.score ?? "";
 }
@@ -228,10 +238,11 @@ export type ClassStats = {
 export function getClassStats(trainees: Trainee[], assessments: Assessment[], grades: Grade[]): ClassStats | null {
   if (!trainees.length) return null;
   const weighted = isWeightedMode(assessments);
+  const grouped = groupGradesByTrainee(grades);
   const totals = trainees.map((t) =>
     weighted
-      ? getTraineeTotalsWeighted(t.id, assessments, grades).total
-      : getTraineeTotals(t.id, assessments, grades).total
+      ? getTraineeTotalsWeighted(t.id, assessments, grouped.get(t.id) ?? []).total
+      : getTraineeTotals(t.id, assessments, grouped.get(t.id) ?? []).total
   );
   const n = totals.length;
   const avg = totals.reduce((s, v) => s + v, 0) / n;

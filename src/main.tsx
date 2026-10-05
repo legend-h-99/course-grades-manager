@@ -29,6 +29,7 @@ import {
   applyCourseSection,
   getClassStats,
   getGradeValue,
+  groupGradesByTrainee,
   getMaxPossibleTotal,
   getTraineeTotals,
   getTraineeTotalsWeighted,
@@ -262,14 +263,15 @@ function App() {
   }, [filteredTrainees, query]);
 
   const weighted = useMemo(() => isWeightedMode(state.assessments), [state.assessments]);
+  const gradesByTrainee = useMemo(() => groupGradesByTrainee(state.grades), [state.grades]);
 
   const totals = useMemo(() => {
     return state.trainees.map((trainee) =>
       weighted
-        ? getTraineeTotalsWeighted(trainee.id, state.assessments, state.grades)
-        : getTraineeTotals(trainee.id, state.assessments, state.grades)
+        ? getTraineeTotalsWeighted(trainee.id, state.assessments, gradesByTrainee.get(trainee.id) ?? [])
+        : getTraineeTotals(trainee.id, state.assessments, gradesByTrainee.get(trainee.id) ?? [])
     );
-  }, [state.assessments, state.grades, state.trainees, weighted]);
+  }, [state.assessments, gradesByTrainee, state.trainees, weighted]);
 
   const classStats = useMemo(
     () => getClassStats(state.trainees, state.assessments, state.grades),
@@ -485,6 +487,18 @@ function App() {
       event.target.value = "";
       return;
     }
+    event.target.value = "";
+    if (state.trainees.length || state.grades.length) {
+      setConfirmDialog({
+        message: "سيستبدل الملف قائمة المتدربين الحالية ويمسح درجاتهم المسجلة. هل تريد المتابعة؟",
+        onConfirm: () => { setConfirmDialog(null); void importTraineeFile(file); },
+      });
+      return;
+    }
+    await importTraineeFile(file);
+  }
+
+  async function importTraineeFile(file: File) {
     setImportMessage("");
 
     try {
@@ -498,20 +512,22 @@ function App() {
       const nextState = { ...state, trainees, grades: [] };
       setState(nextState);
       setActiveCardId(trainees[0]?.id ?? null);
-      setImportMessage(`تم استيراد ${trainees.length} متدرب.`);
+      setImportMessage(`تم تحميل ${trainees.length} متدرب إلى الجدول.`);
       if (currentUser && state.course.code) {
         setIsBusy(true);
         try {
           const saveResult = await saveWorkspaceUC(workspaceRepo, withCourseTrainer(currentUser.id, nextState));
           if (saveResult) setState((current) => ({ ...current, course: { ...current.course, ...saveResult } }));
           setLastSavedAt(new Date().toISOString());
-        } catch { /* silent — user can save manually */ }
+          setImportMessage(`تم استيراد ${trainees.length} متدرب وحفظهم.`);
+        } catch {
+          setImportMessage("تم تحميل الملف إلى الجدول، لكن تعذّر حفظه. أعد المحاولة من زر حفظ البيانات.");
+          toast("تعذّر حفظ المتدربين المستوردين. البيانات لم تُحفظ على الخادم.", "error");
+        }
         finally { setIsBusy(false); }
       }
     } catch (err) {
       setImportMessage((err as Error).message || "تعذر قراءة الملف. استخدم ملف Excel بصيغة xlsx أو ملف CSV.");
-    } finally {
-      event.target.value = "";
     }
   }
 
@@ -1206,7 +1222,7 @@ function App() {
                 <label>
                   <FileUp size={18} />
                   استيراد ملف
-                  <input hidden type="file" accept=".xlsx,.xls,.csv" onChange={importTrainees} />
+                  <input className="sr-only" type="file" accept=".xlsx,.csv" onChange={importTrainees} />
                 </label>
               </Button>
               {importMessage && <p className="helper-text">{importMessage}</p>}
@@ -1254,12 +1270,14 @@ function App() {
                     <td data-label="الرقم التدريبي">
                       <Input
                         value={trainee.trainingNumber}
+                        aria-label={`الرقم التدريبي للمتدرب ${trainee.name}`}
                         onChange={(event) => updateTrainee(trainee.id, "trainingNumber", event.target.value)}
                       />
                     </td>
                     <td data-label="اسم المتدرب">
                       <Input
                         value={trainee.name}
+                        aria-label={`اسم المتدرب ${trainee.trainingNumber}`}
                         onChange={(event) => updateTrainee(trainee.id, "name", event.target.value)}
                       />
                     </td>
@@ -1306,6 +1324,7 @@ function App() {
             />
             <select
               value={assessmentDraft.kind}
+              aria-label="نوع الاختبار"
               onChange={(event) =>
                 setAssessmentDraft((draft) => ({ ...draft, kind: event.target.value as AssessmentKind }))
               }
@@ -1315,6 +1334,7 @@ function App() {
             </select>
             <select
               value={assessmentDraft.category}
+              aria-label="فئة الاختبار"
               onChange={(event) =>
                 setAssessmentDraft((draft) => ({ ...draft, category: event.target.value as "final" | "coursework" }))
               }
@@ -1344,6 +1364,7 @@ function App() {
             />
             <Input
               type="date"
+              aria-label="تاريخ الاختبار"
               value={assessmentDraft.date}
               onChange={(event) => setAssessmentDraft((draft) => ({ ...draft, date: event.target.value }))}
             />
@@ -1403,9 +1424,10 @@ function App() {
               </thead>
               <tbody>
                 {filteredTrainees.map((trainee) => {
+                  const traineeGrades = gradesByTrainee.get(trainee.id) ?? [];
                   const t = weighted
-                    ? getTraineeTotalsWeighted(trainee.id, state.assessments, state.grades)
-                    : getTraineeTotals(trainee.id, state.assessments, state.grades);
+                    ? getTraineeTotalsWeighted(trainee.id, state.assessments, traineeGrades)
+                    : getTraineeTotals(trainee.id, state.assessments, traineeGrades);
                   return (
                     <tr
                       key={trainee.id}
@@ -1422,10 +1444,11 @@ function App() {
                         <td key={assessment.id} data-label={assessment.name}>
                           <Input
                             className="grade-input"
+                            aria-label={`درجة ${trainee.name} في ${assessment.name}`}
                             type="number"
                             min="0"
                             max={assessment.maxScore}
-                            value={getGradeValue(trainee.id, assessment.id, state.grades)}
+                            value={getGradeValue(trainee.id, assessment.id, traineeGrades)}
                             onChange={(event) =>
                               updateGrade(trainee.id, assessment.id, event.target.value)
                             }
@@ -1494,10 +1517,17 @@ function App() {
 function ConfirmDialog({ message, onConfirm, onCancel }: { message: string; onConfirm: () => void; onCancel: () => void }) {
   return (
     <div className="confirm-overlay" onClick={onCancel} role="presentation">
-      <div className="confirm-dialog" onClick={(e) => e.stopPropagation()} role="alertdialog" aria-modal="true">
-        <p>{message}</p>
+      <div className="confirm-dialog" onClick={(e) => e.stopPropagation()} role="alertdialog" aria-modal="true" aria-label="تأكيد الإجراء" aria-describedby="confirm-message" onKeyDown={(event) => {
+        if (event.key === "Escape") onCancel();
+        if (event.key === "Tab") {
+          const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button"));
+          const next = event.shiftKey ? buttons[0] : buttons[buttons.length - 1];
+          if (document.activeElement === next) { event.preventDefault(); (event.shiftKey ? buttons[buttons.length - 1] : buttons[0])?.focus(); }
+        }
+      }}>
+        <p id="confirm-message">{message}</p>
         <div className="confirm-actions">
-          <Button variant="outline" onClick={onCancel}>إلغاء</Button>
+          <Button variant="outline" onClick={onCancel} autoFocus>إلغاء</Button>
           <Button onClick={onConfirm}>تأكيد</Button>
         </div>
       </div>
@@ -1637,7 +1667,7 @@ function AuthPanel({
       <div className="auth-form">
         {step === "start" && (
           <>
-            <div className="auth-tabs" role="tablist" aria-label="اختيار نوع المصادقة">
+            <div className="auth-tabs" role="group" aria-label="اختيار نوع المصادقة">
               <button type="button" className={mode === "login" ? "active" : ""} onClick={() => { onModeChange("login"); setSubmitted(false); }}>
                 دخول
               </button>

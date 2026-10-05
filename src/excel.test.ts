@@ -96,3 +96,9 @@ describe("readTraineeRows — CSV parsing", () => {
     expect(rows).toHaveLength(50);
   });
 });
+
+describe('unsupported spreadsheet formats', () => {
+  it('rejects legacy XLS with conversion instructions', async () => {
+    await expect(readTraineeRows(makeCsvFile('legacy', 'trainees.xls'))).rejects.toThrow('XLSX');
+  });
+});

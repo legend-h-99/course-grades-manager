@@ -8,6 +8,7 @@ const securityHeaders = {
   "Content-Security-Policy": [
     "default-src 'self'",
     "script-src 'self'",
+    "worker-src 'self' blob:",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data:",
@@ -493,7 +494,30 @@ async function loadWorkspace(env, token, userId, requestedCourseId = "") {
   };
 }
 
+function validateWorkspace(state) {
+  if (!state?.account || !state.trainer || !Array.isArray(state.trainees) || !Array.isArray(state.assessments) || !Array.isArray(state.grades)) {
+    throw requestError("بيانات مساحة العمل غير صالحة.");
+  }
+  const trainees = new Set(state.trainees.map((trainee) => trainee.id));
+  const assessments = new Map();
+  for (const assessment of state.assessments) {
+    if (!Number.isFinite(assessment.maxScore) || assessment.maxScore <= 0 ||
+        !Number.isFinite(assessment.weight ?? 0) || (assessment.weight ?? 0) < 0 || (assessment.weight ?? 0) > 100) {
+      throw requestError("الدرجة القصوى أو وزن الاختبار غير صالح.");
+    }
+    assessments.set(assessment.id, assessment);
+  }
+  for (const grade of state.grades) {
+    const assessment = assessments.get(grade.assessmentId);
+    if (!trainees.has(grade.traineeId) || !assessment ||
+        (grade.score !== "" && (!Number.isFinite(grade.score) || grade.score < 0 || grade.score > assessment.maxScore))) {
+      throw requestError("الدرجة غير صالحة أو لا تتبع متدربًا واختبارًا في المقرر.");
+    }
+  }
+}
+
 async function saveWorkspace(env, token, userId, state) {
+  validateWorkspace(state);
   await saveProfile(env, token, userId, {
     collegeName: state.account.collegeName,
     departmentName: state.account.departmentName,
@@ -535,7 +559,7 @@ async function saveWorkspace(env, token, userId, state) {
     });
     courseRow = { id: existingCourse.id, updated_at: updatedAt };
   }
-  if (!courseRow) throw new Error("تم تعديل المقرر من مدرب آخر. استدعِ آخر نسخة ثم أعد تطبيق تغييراتك.");
+  if (!courseRow) throw requestError("تم تعديل المقرر من مدرب آخر. استدعِ آخر نسخة ثم أعد تطبيق تغييراتك.", 409);
   const courseId = courseRow.id;
 
   await upsert(env, token, "course_trainers", [{

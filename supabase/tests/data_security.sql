@@ -6,8 +6,11 @@ declare
   v_course_id uuid := gen_random_uuid();
   v_trainee_id uuid := gen_random_uuid();
   v_assessment_id uuid := gen_random_uuid();
+  second_course_id uuid := gen_random_uuid();
+  second_assessment_id uuid := gen_random_uuid();
   invite text := upper(replace(gen_random_uuid()::text,'-',''));
   affected integer;
+  rejected boolean;
 begin
   -- Synthetic fixtures exist only inside this rolled-back transaction.
   insert into auth.users(id) values(owner_id),(outsider_id);
@@ -22,6 +25,21 @@ begin
   insert into public.trainees(id,course_id,name,training_number) values(v_trainee_id,v_course_id,'Synthetic trainee','TEST-001');
   insert into public.assessments(id,course_id,name,kind,max_score,date) values(v_assessment_id,v_course_id,'Synthetic assessment','theory',20,current_date);
   insert into public.grades(trainee_id,assessment_id,score) values(v_trainee_id,v_assessment_id,17);
+  begin
+    update public.grades set score=999 where trainee_id=v_trainee_id;
+    raise exception 'Above-maximum grade accepted';
+  exception when check_violation then null; end;
+  begin
+    update public.assessments set max_score=10 where id=v_assessment_id;
+    raise exception 'Maximum below existing grade accepted';
+  exception when check_violation then null; end;
+  insert into public.courses(id,code,created_by) values(second_course_id,upper(replace(gen_random_uuid()::text,'-','')),owner_id);
+  insert into public.course_trainers(course_id,user_id) values(second_course_id,owner_id);
+  insert into public.assessments(id,course_id,name,kind,max_score,date) values(second_assessment_id,second_course_id,'Second test','theory',20,current_date);
+  begin
+    insert into public.grades(trainee_id,assessment_id,score) values(v_trainee_id,second_assessment_id,10);
+    raise exception 'Cross-course grade accepted';
+  exception when check_violation then null; end;
   perform set_config('request.jwt.claim.sub',outsider_id::text,true);
   if exists(select 1 from public.courses where id=v_course_id) then raise exception 'Outsider can read course'; end if;
   if exists(select 1 from public.profiles where id=owner_id) then raise exception 'Outsider can read profile'; end if;
@@ -32,6 +50,22 @@ begin
     insert into public.course_trainers(course_id,user_id) values(v_course_id,outsider_id);
     raise exception 'Direct self-enrolment unexpectedly allowed';
   exception when insufficient_privilege then null; end;
+  rejected := false;
+  begin
+    perform public.join_course_by_code(upper(replace(gen_random_uuid()::text,'-','')),'Invalid test','');
+  exception when raise_exception then rejected := true; end;
+  if not rejected then raise exception 'Invalid invite accepted'; end if;
+  reset role;
+  update public.course_invites set expires_at=now()-interval '1 minute' where course_id=v_course_id;
+  set local role authenticated;
+  rejected := false;
+  begin
+    perform public.join_course_by_code(invite,'Expired test','');
+  exception when raise_exception then rejected := true; end;
+  if not rejected then raise exception 'Expired invite accepted'; end if;
+  reset role;
+  update public.course_invites set expires_at=now()+interval '30 days' where course_id=v_course_id;
+  set local role authenticated;
   perform public.join_course_by_code(invite,'Security test','');
   if not public.is_course_trainer(v_course_id) then raise exception 'Valid invite rejected'; end if;
   if not exists(select 1 from public.grades where trainee_id=v_trainee_id and score=17) then raise exception 'Member cannot read shared grade'; end if;

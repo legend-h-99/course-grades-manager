@@ -1079,7 +1079,7 @@ textarea:focus-visible {
   display: flex;
   align-items: center;
   gap: 10px;
-  color: #9aa6ac;
+  color: #607077;
   font-size: 12px;
   font-weight: 600;
 }
@@ -1316,7 +1316,7 @@ th {
 
 td small {
   display: block;
-  color: #6d7a80;
+  color: #526168;
   margin-top: 2px;
 }
 
