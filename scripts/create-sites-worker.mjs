@@ -475,9 +475,13 @@ async function loadWorkspace(env, token, userId, requestedCourseId = "") {
       score: g.score,
     }));
 
+  const memberTrainer = trainers.find((item) => item.userId === userId);
   return {
     account,
-    trainer,
+    trainer: {
+      name: trainer.name || memberTrainer?.name || "",
+      employeeNumber: trainer.employeeNumber || memberTrainer?.employeeNumber || ""
+    },
     trainers,
     course: {
       name: courseRow.name,
@@ -532,7 +536,7 @@ async function saveWorkspace(env, token, userId, state) {
     name: state.course.name,
     kind: state.course.kind,
     section_number: state.course.sectionNumber,
-    saved_at: state.course.savedAt,
+    saved_at: nextUpdatedAt,
     updated_at: nextUpdatedAt
   };
 
